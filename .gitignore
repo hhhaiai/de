@@ -12,6 +12,7 @@ import-summary.txt
 *.iml
 target/
 .idea/
+.idea
 .gradle/
 release/
 build/
