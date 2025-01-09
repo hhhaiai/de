@@ -167,14 +167,21 @@ class APIServer:
             # check model
             model = data.get("model")
             # print(f"model: {model}")
-            # if "auto" == model:
-            #     model = dg.get_auto_model(model)
+            # just auto will check
+            if "auto" == model:
+                model = dg.get_auto_model(model)
             # else:
             #     if not dg.is_model_available(model):
             #         raise HTTPException(status_code=400, detail="Invalid Model")
-            ## kuan
-            model = dg.get_model_by_autoupdate(model)
+            # ## kuan
+            # model = dg.get_model_by_autoupdate(model)
+
             # must has token ? token check
+            authorization = headers.get('Authorization')
+            token = os.getenv("TOKEN", "")
+            # Check if the token exists and is not in the Authorization header.
+            if token and token not in authorization:
+                return "Token not in authorization header"
 
             # call ai
             msgs = data.get("messages")
