@@ -42,4 +42,6 @@ jobs:
       with:
         context: .
         push: true
-        tags: ghcr.io/${{ github.repository_owner }}/${{ github.repository }}:${{ env.VERSION }}
+        tags: |
+          ghcr.io/${{ github.repository_owner }}/${{ github.repository }}:${{ env.VERSION }}
+          ghcr.io/${{ github.repository_owner }}/${{ github.repository }}:latest
