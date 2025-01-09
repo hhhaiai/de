@@ -265,6 +265,8 @@ def chat_completion_messages(
         "presence_penalty": presence_penalty
 
     }
+    # print(json.dumps(headers, indent=4))
+    # print(json.dumps(payload, indent=4))
     return chat_completion(url, headers, payload)
 
 

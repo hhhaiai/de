@@ -19,7 +19,7 @@ import degpt as dg
 app = FastAPI(
     title="ones",
     description="High-performance API service",
-    version="1.0.0|2025.1.6"
+    version="1.0.2|2025.1.9"
 )
 # debug for Log
 debug = False
@@ -57,15 +57,22 @@ class APIServer:
             ## 或者返回HTML内容
             return HTMLResponse(content="<h1>hello. It's web page.</h1>")
 
-        @self.app.get("/api/v1/models")
+        @self.app.get("/v1/models")
         async def models() -> str:
-            models_str = dg.get_models()  # Get the JSON string
-            models_json = json.loads(models_str)  # Convert it back to a Python object
-            return JSONResponse(content=models_json)  # Return as JSON response
+            if debug:
+                print("Registering /api/v1/models route")  # Debugging line
+            models_str = dg.get_models()
+            models_json = json.loads(models_str)
+            return JSONResponse(content=models_json)
 
         routes = self._get_routes()
+        if debug:
+            print(f"Registering routes: {routes}")
         for path in routes:
             self._register_route(path)
+        existing_routes = [route.path for route in self.app.routes if hasattr(route, 'path')]
+        if debug:
+            print(f"All routes now: {existing_routes}")
 
     def _get_routes(self) -> List[str]:
         """Get configured API routes"""
@@ -177,16 +184,20 @@ class APIServer:
             # model = dg.get_model_by_autoupdate(model)
 
             # must has token ? token check
+            if debug:
+                print(f"request model: {model}")
             authorization = headers.get('Authorization')
             token = os.getenv("TOKEN", "")
             # Check if the token exists and is not in the Authorization header.
             if token and token not in authorization:
                 return "Token not in authorization header"
+            if debug:
+                print(f"request token: {token}")
 
             # call ai
             msgs = data.get("messages")
             if debug:
-                print(f"req messages: {msgs}")
+                print(f"request messages: {msgs}")
             result = dg.chat_completion_messages(messages=msgs, model=model)
             if debug:
                 print(f"result: {result}---- {self.is_chatgpt_format(result)}")
