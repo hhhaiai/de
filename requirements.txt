@@ -1,0 +1,9 @@
+# Core dependencies
+fastapi
+uvicorn
+tiktoken
+
+# Performance optimizations
+uvloop
+httptools
+apscheduler
