@@ -2,9 +2,11 @@ name: Build and Publish Docker Image
 
 on:
   push:
+    branches:
+      - main  # 监听主分支
     tags:
-      - 'v*'
-  workflow_dispatch:
+      - 'v*'  # 监听版本标签
+  workflow_dispatch:  # 支持手动触发
 
 jobs:
   build:
@@ -12,43 +14,51 @@ jobs:
     permissions:
       contents: read
       packages: write
-    timeout-minutes: 120
 
     steps:
     - name: Checkout code
       uses: actions/checkout@v4
-      with:
-        fetch-depth: 1
-
-    # 添加明确的登录步骤
-    - name: Login to GHCR
-      uses: docker/login-action@v3
-      with:
-        registry: ghcr.io
-        username: ${{ github.actor }}
-        password: ${{ secrets.GITHUB_TOKEN }}
 
     - name: Set up QEMU
       uses: docker/setup-qemu-action@v3
-      with:
-        platforms: linux/amd64,linux/arm64
 
     - name: Set up Docker Buildx
       uses: docker/setup-buildx-action@v3
-      with:
-        version: latest
-        driver-opts: |
-          image=moby/buildkit:latest
-        buildkitd-flags: --debug
 
-    # 简化缓存配置
-    - name: Cache Docker layers
-      uses: actions/cache@v3
+    # 添加版本提取步骤
+    - name: Extract version
+      id: version
+      if: startsWith(github.ref, 'refs/tags/v')
+      run: |
+        VERSION="${GITHUB_REF#refs/tags/v}"
+        echo "VERSION=$VERSION" >> $GITHUB_ENV
+        echo "Extracted version: $VERSION"
+
+    - name: Extract Docker metadata
+      id: meta
+      uses: docker/metadata-action@v5
       with:
-        path: /tmp/.buildx-cache
-        key: ${{ runner.os }}-buildx-${{ github.sha }}
-        restore-keys: |
-          ${{ runner.os }}-buildx-
+        images: ghcr.io/${{ github.repository }}
+        tags: |
+          # 完整版本号（例如：v1.0.4 -> 1.0.4）
+          type=semver,pattern={{version}},suffix=
+          # main分支更新latest
+          type=raw,value=latest,enable=${{ github.ref == 'refs/heads/main' }}
+          # commit SHA标签
+          type=sha,prefix=sha-,format=short
+
+    # 添加调试步骤
+    - name: Debug metadata
+      run: |
+        echo "Generated tags: ${{ steps.meta.outputs.tags }}"
+        echo "Generated labels: ${{ steps.meta.outputs.labels }}"
+
+    - name: Log in to GitHub Container Registry
+      uses: docker/login-action@v3
+      with:
+        registry: ghcr.io
+        username: ${{ github.repository_owner }}
+        password: ${{ secrets.GITHUB_TOKEN }}
 
     - name: Build and Push Docker Image
       uses: docker/build-push-action@v5
@@ -56,17 +66,7 @@ jobs:
         context: .
         platforms: linux/amd64,linux/arm64
         push: true
-        tags: ghcr.io/${{ github.repository }}:${{ github.ref_name }}
-        cache-from: type=local,src=/tmp/.buildx-cache
-        cache-to: type=local,dest=/tmp/.buildx-cache-new,mode=max
-        build-args: |
-          BUILDKIT_INLINE_CACHE=1
-        outputs: type=registry
-        provenance: false
-        push-retry: 2
-
-    - name: Move cache
-      if: always()
-      run: |
-        rm -rf /tmp/.buildx-cache
-        mv /tmp/.buildx-cache-new /tmp/.buildx-cache
+        tags: ${{ steps.meta.outputs.tags }}
+        labels: ${{ steps.meta.outputs.labels }}
+        cache-from: type=gha
+        cache-to: type=gha,mode=max
