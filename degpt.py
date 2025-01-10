@@ -91,23 +91,39 @@ def get_alive_models():
             timestamp_in_milliseconds = int(timestamp_in_seconds * 1000)
 
             # 根据 default_models 生成 models 数据结构
-            models = {
-                "object": "list",
-                "version": data.get("version", ""),
-                "provider": data.get("name", ""),
-                "time": timestamp_in_milliseconds,
-                "data": []
-            }
+            # models = {
+            #     "object": "list",
+            #     "version": data.get("version", ""),
+            #     "provider": data.get("name", ""),
+            #     "time": timestamp_in_milliseconds,
+            #     "data": []
+            # }
+            #
+            # for model in default_models:
+            #     models["data"].append({
+            #         "id": model.strip(),
+            #         "object": "model",
+            #         "created": 0,
+            #         "owned_by": model.split("-")[0]  # 假设所有模型的所有者是模型名的前缀
+            #     })
+            if default_models:
+                # print("\n提取的模型列表:")
+                existing_ids = {m.get('id') for m in cached_models["data"]}
+                for model_id in default_models:
 
-            for model in default_models:
-                models["data"].append({
-                    "id": model.strip(),
-                    "object": "model",
-                    "created": 0,
-                    "owned_by": model.split("-")[0]  # 假设所有模型的所有者是模型名的前缀
-                })
+                    if model_id and model_id not in existing_ids:
+                        model_data = {
+                            "id": model_id,
+                            "object": "model",
+                            "created": timestamp_in_milliseconds,
+                            "owned_by": model_id.split("-")[0] if "-" in model_id else "unknown",
+                            "name": model_id,
+                            "description": '',
+                            "support": '',
+                            "tip": ''
+                        }
+                        cached_models["data"].append(model_data)
             # 更新全局缓存
-            cached_models = models
             last_request_time = timestamp_in_seconds  # 更新缓存时间戳
 
             # print("获取新的模型数据:", models)
@@ -363,7 +379,7 @@ def is_chatgpt_format(data):
 if __name__ == '__main__':
     # asyncio.run(get_model_names_from_js())
     print(get_models())
-
-    # # support Chinese
-    # if isinstance(response_content, str):  # 如果已经是 JSON 字符串
-    #     return Response(response_content, content_type="application/json; charset=utf-8")
+#
+#     # # support Chinese
+#     # if isinstance(response_content, str):  # 如果已经是 JSON 字符串
+#     #     return Response(response_content, content_type="application/json; charset=utf-8")
