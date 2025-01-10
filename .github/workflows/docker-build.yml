@@ -2,11 +2,9 @@ name: Build and Publish Docker Image
 
 on:
   push:
-#    branches:
-#      - main  # 监听主分支
     tags:
-      - 'v*'  # 监听版本标签
-  workflow_dispatch:  # 支持手动触发
+      - 'v*'
+  workflow_dispatch:
 
 jobs:
   build:
@@ -14,13 +12,21 @@ jobs:
     permissions:
       contents: read
       packages: write
-    timeout-minutes: 120  # 设置超时时间
+    timeout-minutes: 120
 
     steps:
     - name: Checkout code
       uses: actions/checkout@v4
       with:
-        fetch-depth: 1  # 最小化检出
+        fetch-depth: 1
+
+    # 添加明确的登录步骤
+    - name: Login to GHCR
+      uses: docker/login-action@v3
+      with:
+        registry: ghcr.io
+        username: ${{ github.actor }}
+        password: ${{ secrets.GITHUB_TOKEN }}
 
     - name: Set up QEMU
       uses: docker/setup-qemu-action@v3
@@ -35,7 +41,7 @@ jobs:
           image=moby/buildkit:latest
         buildkitd-flags: --debug
 
-    # 优化缓存配置
+    # 简化缓存配置
     - name: Cache Docker layers
       uses: actions/cache@v3
       with:
@@ -44,48 +50,23 @@ jobs:
         restore-keys: |
           ${{ runner.os }}-buildx-
 
-    - name: Extract Docker metadata
-      id: meta
-      uses: docker/metadata-action@v5
-      with:
-        images: ghcr.io/${{ github.repository }}
-        tags: |
-          type=semver,pattern={{version}},suffix=
-          type=raw,value=latest,enable=${{ github.ref == 'refs/heads/main' }}
-          type=sha,prefix=sha-,format=short
-
     - name: Build and Push Docker Image
       uses: docker/build-push-action@v5
       with:
         context: .
         platforms: linux/amd64,linux/arm64
         push: true
-        tags: ${{ steps.meta.outputs.tags }}
-        labels: ${{ steps.meta.outputs.labels }}
-        # 优化缓存策略
-        cache-from: |
-          type=local,src=/tmp/.buildx-cache
-          type=registry,ref=ghcr.io/${{ github.repository }}:buildcache
-        cache-to: |
-          type=local,dest=/tmp/.buildx-cache-new,mode=max
-          type=registry,ref=ghcr.io/${{ github.repository }}:buildcache,mode=max
-        # 构建优化
+        tags: ghcr.io/${{ github.repository }}:${{ github.ref_name }}
+        cache-from: type=local,src=/tmp/.buildx-cache
+        cache-to: type=local,dest=/tmp/.buildx-cache-new,mode=max
         build-args: |
           BUILDKIT_INLINE_CACHE=1
-          DOCKER_BUILDKIT=1
         outputs: type=registry
         provenance: false
         push-retry: 2
-        max-parallel: 4
 
-    # 缓存更新
     - name: Move cache
+      if: always()
       run: |
         rm -rf /tmp/.buildx-cache
         mv /tmp/.buildx-cache-new /tmp/.buildx-cache
-
-    # 清理构建缓存
-    - name: Cleanup
-      if: always()
-      run: |
-        docker builder prune --force --keep-storage=10GB
