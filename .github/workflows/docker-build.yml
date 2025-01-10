@@ -2,8 +2,8 @@ name: Build and Publish Docker Image
 
 on:
   push:
-    branches:
-      - main  # 监听主分支
+#    branches:
+#      - main  # 监听主分支
     tags:
       - 'v*'  # 监听版本标签
   workflow_dispatch:  # 支持手动触发
