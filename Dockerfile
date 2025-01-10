@@ -8,37 +8,42 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 
 WORKDIR /build
 
-# 优化系统依赖安装
+# 安装构建依赖
 RUN apt-get update && apt-get install -y --no-install-recommends \
     build-essential \
     curl \
     ca-certificates \
-    libatk-bridge2.0-0 \
-    libatk1.0-0 \
-    libatspi2.0-0 \
-    libdbus-1-3 \
-    libdrm2 \
-    libgbm1 \
-    libnspr4 \
+    wget \
+    gnupg \
+    && rm -rf /var/lib/apt/lists/*
+
+# 安装必要的浏览器依赖
+RUN apt-get update && apt-get install -y --no-install-recommends \
     libnss3 \
+    libnspr4 \
+    libatk1.0-0 \
+    libatk-bridge2.0-0 \
+    libdrm2 \
+    libxkbcommon0 \
     libxcomposite1 \
     libxdamage1 \
     libxfixes3 \
     libxrandr2 \
-    && rm -rf /var/lib/apt/lists/* \
-    && apt-get clean
+    libgbm1 \
+    libasound2 \
+    libpango-1.0-0 \
+    libpangocairo-1.0-0 \
+    && rm -rf /var/lib/apt/lists/*
 
-# 优化Python包安装和Playwright安装
+# 安装Python包和Playwright
 COPY requirements.txt .
 RUN pip install --upgrade pip && \
     pip install --no-cache-dir -r requirements.txt && \
     playwright install chromium --with-deps && \
-    rm -rf /root/.cache/pip && \
-    rm -rf /root/.cache/ms-playwright/node* && \
-    find /root/.cache/ms-playwright -name "*.zip" -delete
+    rm -rf /root/.cache/pip
 
 # Runtime stage
-FROM python:3.11-slim-bullseye AS runner
+FROM python:3.11-slim-bullseye
 
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
@@ -48,36 +53,19 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 
 WORKDIR /app
 
-# 优化运行时依赖
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    ca-certificates \
-    libatk-bridge2.0-0 \
-    libatk1.0-0 \
-    libatspi2.0-0 \
-    libdbus-1-3 \
-    libdrm2 \
-    libgbm1 \
-    libnspr4 \
-    libnss3 \
-    libxcomposite1 \
-    libxdamage1 \
-    libxfixes3 \
-    libxrandr2 \
-    curl \
-    && rm -rf /var/lib/apt/lists/* \
-    && apt-get clean
-
-# 优化文件复制
+# 安装运行时依赖
+COPY --from=builder /usr/lib/x86_64-linux-gnu /usr/lib/x86_64-linux-gnu
+COPY --from=builder /usr/share/fonts /usr/share/fonts
 COPY --from=builder /usr/local/lib/python3.11/site-packages /usr/local/lib/python3.11/site-packages
-COPY --from=builder /root/.cache/ms-playwright/chromium-* /ms-playwright/
+COPY --from=builder /ms-playwright /ms-playwright
 
 # 创建非root用户
 RUN useradd -ms /bin/bash appuser && \
     chown -R appuser:appuser /app && \
     chown -R appuser:appuser /ms-playwright
 
-# 只复制必要文件
-COPY --chown=appuser:appuser more_core.py degpt.py requirements.txt ./
+# 复制应用文件
+COPY --chown=appuser:appuser more_core.py degpt.py ./
 
 USER appuser
 
