@@ -22,7 +22,7 @@ jobs:
             suffix: -arm64
             platform: linux/arm64
           - arch: arm64
-            suffix: ''  # 默认标签使用arm64
+            suffix: ''
             platform: linux/arm64
 
     steps:
@@ -35,14 +35,15 @@ jobs:
 
     - uses: docker/setup-buildx-action@v3
 
-    - name: Extract version
+    - name: Extract version and debug info
       id: version
       run: |
-        if [[ $GITHUB_REF == refs/tags/v* ]]; then
-          VERSION=${GITHUB_REF#refs/tags/v}
-          echo "VERSION=$VERSION" >> $GITHUB_ENV
-          echo "version=$VERSION" >> $GITHUB_OUTPUT
-        fi
+        echo "Event: ${{ github.event_name }}"
+        echo "Ref: ${{ github.ref }}"
+        VERSION=${GITHUB_REF#refs/tags/v}
+        echo "Extracted version: $VERSION"
+        echo "VERSION=$VERSION" >> $GITHUB_ENV
+        echo "version=$VERSION" >> $GITHUB_OUTPUT
 
     - uses: docker/metadata-action@v5
       id: meta
