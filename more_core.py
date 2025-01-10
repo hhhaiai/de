@@ -19,7 +19,7 @@ import degpt as dg
 app = FastAPI(
     title="ones",
     description="High-performance API service",
-    version="1.0.3|2025.1.9"
+    version="1.0.4|2025.1.10"
 )
 # debug for Log
 debug = False
@@ -56,6 +56,10 @@ class APIServer:
             # return JSONResponse(content={"message": "hello. It's web page."})
             ## 或者返回HTML内容
             return HTMLResponse(content="<h1>hello. It's web page.</h1>")
+
+        @self.app.get("/health")
+        async def health():
+            return "working..."
 
         @self.app.get("/v1/models")
         async def models() -> str:

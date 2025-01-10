@@ -1,0 +1,47 @@
+#name: Build and Publish Docker Image
+#
+#on:
+#  push:
+#    tags:
+#      - 'v*'  # 监听以 v 开头的 tag
+#
+#jobs:
+#  build:
+#    runs-on: ubuntu-latest
+#    permissions:
+#      contents: write
+#      packages: write
+#
+#    steps:
+#    - name: Checkout code
+#      uses: actions/checkout@v3
+#
+#    - name: Extract version from tag
+#      id: extract_version
+#      run: |
+#        TAG_NAME="${GITHUB_REF#refs/tags/}"
+#        VERSION="${TAG_NAME#v}"
+#        echo "VERSION=$VERSION" >> $GITHUB_ENV
+#        echo "TAG_NAME=$TAG_NAME" >> $GITHUB_ENV
+#
+#    - name: Debug version info
+#      run: |
+#        echo "Git ref: ${{ github.ref }}"
+#        echo "Tag name: ${{ env.TAG_NAME }}"
+#        echo "Version: ${{ env.VERSION }}"
+#
+#    - name: Log in to GitHub Container Registry
+#      uses: docker/login-action@v2
+#      with:
+#        registry: ghcr.io
+#        username: ${{ github.actor }}
+#        password: ${{ secrets.GITHUB_TOKEN }}
+#
+#    - name: Build and Push Docker Image
+#      uses: docker/build-push-action@v4
+#      with:
+#        context: .
+#        push: true
+#        tags: |
+#          ghcr.io/${{ github.repository }}:${{ env.VERSION }}
+#          ghcr.io/${{ github.repository }}:latest

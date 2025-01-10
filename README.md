@@ -13,6 +13,13 @@
 Install from the command line
 ``` bash
 $ docker pull ghcr.io/hhhaiai/de:latest
+$ docker run -d \
+  --name de \
+  --restart always \
+  -p 7860:7860 \
+  -m 2g \
+  -e DEBUG=false \
+  ghcr.io/hhhaiai/de:latest
 ```
 Use as base image in Dockerfile:
 ``` dockerfile
