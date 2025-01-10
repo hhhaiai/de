@@ -4,7 +4,8 @@ FROM python:3.11-slim-bullseye AS builder
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
     PIP_NO_CACHE_DIR=1 \
-    DEBIAN_FRONTEND=noninteractive
+    DEBIAN_FRONTEND=noninteractive \
+    PLAYWRIGHT_BROWSERS_PATH=/root/.cache/ms-playwright
 
 WORKDIR /build
 
@@ -48,7 +49,7 @@ COPY requirements.txt .
 RUN pip install --upgrade pip && \
     pip install --no-cache-dir -r requirements.txt && \
     playwright install chromium --with-deps && \
-    ls -la /root/.cache/ms-playwright  # 验证安装
+    ls -la /root/.cache/ms-playwright
 
 # Runtime stage
 FROM python:3.11-slim-bullseye
@@ -57,7 +58,7 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
     PORT=7860 \
     DEBUG=false \
-    PLAYWRIGHT_BROWSERS_PATH=/ms-playwright
+    PLAYWRIGHT_BROWSERS_PATH=/root/.cache/ms-playwright
 
 WORKDIR /app
 
@@ -90,13 +91,12 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 
 # 复制必要文件
 COPY --from=builder /usr/local/lib/python3.11/site-packages /usr/local/lib/python3.11/site-packages
-COPY --from=builder /root/.cache/ms-playwright /ms-playwright
+COPY --from=builder /root/.cache/ms-playwright /root/.cache/ms-playwright
 
 # 创建非root用户
 RUN groupadd -r appuser && useradd -r -g appuser appuser && \
-    mkdir -p /ms-playwright && \
     chown -R appuser:appuser /app && \
-    chown -R appuser:appuser /ms-playwright
+    chown -R appuser:appuser /root/.cache/ms-playwright
 
 # 复制应用文件
 COPY --chown=appuser:appuser more_core.py degpt.py ./
