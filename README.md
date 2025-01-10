@@ -25,3 +25,9 @@ Use as base image in Dockerfile:
 ``` dockerfile
 FROM ghcr.io/hhhaiai/de:latest
 ```
+
+build test use code
+``` bash
+$ docker build --no-cache --compress -t de .
+$ docker run -p 7860:7860 -m 2g -e DEBUG=false de
+```
