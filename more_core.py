@@ -1,28 +1,29 @@
 import json
+import json
 import multiprocessing
 import os
 import random
 import string
 import time
-from json.decoder import JSONDecodeError
 from typing import Dict, Any, List
 
 import tiktoken
 import uvicorn
 from apscheduler.schedulers.background import BackgroundScheduler
 from fastapi import FastAPI, Request, HTTPException
-from fastapi.responses import RedirectResponse, JSONResponse
+from fastapi.responses import JSONResponse
 from starlette.responses import HTMLResponse
 
 import degpt as dg
 
+# debug for Log
+debug = False
+
 app = FastAPI(
     title="ones",
     description="High-performance API service",
-    version="1.0.7|2025.1.10"
+    version="1.1.0|2025.1.11"
 )
-# debug for Log
-debug = False
 
 
 class APIServer:
@@ -39,36 +40,33 @@ class APIServer:
     def _setup_routes(self) -> None:
         """Initialize API routes"""
 
-        # 修改根路由的重定向实现
-        @self.app.get("/", include_in_schema=False)
+        # Static routes with names for filtering
+        @self.app.get("/", name="root", include_in_schema=False)
         async def root():
-            # # 添加状态码和确保完整URL
-            # return RedirectResponse(
-            #     url="/web",
-            #     status_code=302  # 添加明确的重定向状态码
-            # )
             return HTMLResponse(content="<h1>hello. It's home page.</h1>")
 
-        # 修改 web 路由的返回类型
-        @self.app.get("/web")
+        @self.app.get("/web", name="web")
         async def web():
-            # # 返回 JSONResponse 或 HTML 内容
-            # return JSONResponse(content={"message": "hello. It's web page."})
-            ## 或者返回HTML内容
             return HTMLResponse(content="<h1>hello. It's web page.</h1>")
 
-        @self.app.get("/health")
+        @self.app.get("/health", name="health")
         async def health():
-            return "working..."
+            return JSONResponse(content={"status": "working"})
 
-        @self.app.get("/v1/models")
-        async def models() -> str:
+
+        @self.app.get("/v1/models", name="models")
+        async def models():
             if debug:
-                print("Registering /api/v1/models route")  # Debugging line
-            models_str = dg.get_models()
-            models_json = json.loads(models_str)
-            return JSONResponse(content=models_json)
+                print("Fetching models...")
+            models_str = await dg.get_models()
+            try:
+                models_json = json.loads(models_str)
+                return JSONResponse(content=models_json)
+            except json.JSONDecodeError as e:
+                raise HTTPException(status_code=500,
+                                    detail=f"Invalid models data: {str(e)}")
 
+        # Register dynamic chat completion routes
         routes = self._get_routes()
         if debug:
             print(f"Registering routes: {routes}")
@@ -112,10 +110,6 @@ class APIServer:
                 if debug:
                     print(f"Request received...\r\n\tHeaders: {headers},\r\n\tData: {data}")
                 return await self._generate_response(headers, data)
-            except JSONDecodeError as e:
-                if debug:
-                    print(f"JSON decode error: {e}")
-                raise HTTPException(status_code=400, detail="Invalid JSON format") from e
             except Exception as e:
                 if debug:
                     print(f"Request processing error: {e}")
@@ -174,35 +168,40 @@ class APIServer:
     async def _generate_response(self, headers: Dict[str, str], data: Dict[str, Any]) -> Dict[str, Any]:
         """Generate API response"""
         global debug
+        if debug:
+            print("inside _generate_response")
         try:
             # check model
             model = data.get("model")
             # print(f"model: {model}")
             # just auto will check
             if "auto" == model:
-                model = dg.get_auto_model(model)
+                model = await dg.get_auto_model()
             # else:
             #     if not dg.is_model_available(model):
             #         raise HTTPException(status_code=400, detail="Invalid Model")
             # ## kuan
             # model = dg.get_model_by_autoupdate(model)
-
             # must has token ? token check
-            if debug:
-                print(f"request model: {model}")
             authorization = headers.get('Authorization')
             token = os.getenv("TOKEN", "")
-            # Check if the token exists and is not in the Authorization header.
             if token and token not in authorization:
-                return "Token not in authorization header"
-            if debug:
-                print(f"request token: {token}")
+                raise HTTPException(status_code=401, detail="无效的Token")
 
             # call ai
             msgs = data.get("messages")
+            if not msgs:
+                raise HTTPException(status_code=400, detail="消息不能为空")
+
             if debug:
+                print(f"request model: {model}")
+                print(f"request token: {token}")
                 print(f"request messages: {msgs}")
-            result = dg.chat_completion_messages(messages=msgs, model=model)
+
+            result = await dg.chat_completion_messages(
+                messages=msgs,
+                model=model
+            )
             if debug:
                 print(f"result: {result}---- {self.is_chatgpt_format(result)}")
 
@@ -211,8 +210,8 @@ class APIServer:
 
             # If the request body data already matches ChatGPT format, return it directly
             if self.is_chatgpt_format(result):
-                response_data = self.process_result(result,
-                                                    model)  # If data already follows ChatGPT format, use it directly
+                # If data already follows ChatGPT format, use it directly
+                response_data = self.process_result(result, model)
             else:
                 # Calculate the current timestamp
                 current_timestamp = int(time.time() * 1000)
@@ -247,6 +246,7 @@ class APIServer:
 
             return response_data
         except Exception as e:
+            await dg.record_call(model,False)
             if debug:
                 print(f"Response generation error: {e}")
             raise HTTPException(status_code=500, detail=str(e)) from e
@@ -287,8 +287,8 @@ class APIServer:
         server = uvicorn.Server(config)
         server.run()
 
-    def _reload_check(self) -> None:
-        dg.reload_check()
+    async def _reload_check(self) -> None:
+        await dg.reload_check()
 
     def _schedule_route_check(self) -> None:
         """
@@ -320,11 +320,26 @@ class APIServer:
                 print("Routes changed, reloading...")
             self._reload_routes(new_routes)
 
+    # def _reload_routes(self, new_routes: List[str]) -> None:
+    #     """Reload the routes based on the updated configuration"""
+    #     # Clear existing routes
+    #     self.app.routes.clear()
+    #     # Register new routes
+    #     for path in new_routes:
+    #         self._register_route(path)
+
     def _reload_routes(self, new_routes: List[str]) -> None:
-        """Reload the routes based on the updated configuration"""
-        # Clear existing routes
-        self.app.routes.clear()
-        # Register new routes
+        """Reload only dynamic routes while preserving static ones"""
+        # Define static route names
+        static_routes = {"root", "web", "health", "models"}
+
+        # Remove only dynamic routes
+        self.app.routes[:] = [
+            route for route in self.app.routes
+            if not hasattr(route, 'name') or route.name in static_routes
+        ]
+
+        # Register new dynamic routes
         for path in new_routes:
             self._register_route(path)
 

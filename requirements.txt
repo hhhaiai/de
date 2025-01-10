@@ -4,13 +4,20 @@ uvicorn[standard]
 tiktoken
 playwright
 requests
+starlette
+pydantic
 
 # Async support
 uvloop
 httptools
 aiohttp
+asyncio
 
 # Utils
 apscheduler
 python-json-logger
 typing-extensions
+python-dotenv
+
+# Optional performance optimization
+ujson
