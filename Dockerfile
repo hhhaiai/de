@@ -33,6 +33,14 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libasound2 \
     libpango-1.0-0 \
     libpangocairo-1.0-0 \
+    libx11-6 \
+    libx11-xcb1 \
+    libxcb1 \
+    libxext6 \
+    libxss1 \
+    libgtk-3-0 \
+    libcups2 \
+    fonts-liberation \
     && rm -rf /var/lib/apt/lists/*
 
 # 安装Python包和Playwright
@@ -54,13 +62,38 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 WORKDIR /app
 
 # 安装运行时依赖
-COPY --from=builder /usr/lib/x86_64-linux-gnu /usr/lib/x86_64-linux-gnu
-COPY --from=builder /usr/share/fonts /usr/share/fonts
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    curl \
+    ca-certificates \
+    libnss3 \
+    libnspr4 \
+    libatk1.0-0 \
+    libatk-bridge2.0-0 \
+    libdrm2 \
+    libxkbcommon0 \
+    libxcomposite1 \
+    libxdamage1 \
+    libxfixes3 \
+    libxrandr2 \
+    libgbm1 \
+    libasound2 \
+    libpango-1.0-0 \
+    libpangocairo-1.0-0 \
+    libx11-6 \
+    libx11-xcb1 \
+    libxcb1 \
+    libxext6 \
+    libxss1 \
+    libgtk-3-0 \
+    libcups2 \
+    && rm -rf /var/lib/apt/lists/*
+
+# 复制必要文件
 COPY --from=builder /usr/local/lib/python3.11/site-packages /usr/local/lib/python3.11/site-packages
 COPY --from=builder /ms-playwright /ms-playwright
 
 # 创建非root用户
-RUN useradd -ms /bin/bash appuser && \
+RUN groupadd -r appuser && useradd -r -g appuser appuser && \
     chown -R appuser:appuser /app && \
     chown -R appuser:appuser /ms-playwright
 

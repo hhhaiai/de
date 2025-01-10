@@ -115,6 +115,7 @@ def get_alive_models():
                         model_data = {
                             "id": model_id,
                             "object": "model",
+                            "model": model_id,
                             "created": timestamp_in_milliseconds,
                             "owned_by": model_id.split("-")[0] if "-" in model_id else "unknown",
                             "name": model_id,
@@ -193,6 +194,7 @@ async def get_model_names_from_js(url="https://www.degpt.ai/", timeout: int = 60
                                             model_data = {
                                                 "id": model_id,
                                                 "object": "model",
+                                                "model": model_id,
                                                 "created": int(time.time()),
                                                 "owned_by": model_id.split("-")[0] if "-" in model_id else "unknown",
                                                 "name": model.get('name', ''),
@@ -376,9 +378,9 @@ def is_chatgpt_format(data):
     return False
 
 
-# if __name__ == '__main__':
-#     # asyncio.run(get_model_names_from_js())
-#     print(get_models())
+if __name__ == '__main__':
+    # asyncio.run(get_model_names_from_js())
+    print(get_models())
 #
 #     # # support Chinese
 #     # if isinstance(response_content, str):  # 如果已经是 JSON 字符串
