@@ -19,7 +19,7 @@ import degpt as dg
 app = FastAPI(
     title="ones",
     description="High-performance API service",
-    version="1.0.6|2025.1.10"
+    version="1.0.7|2025.1.10"
 )
 # debug for Log
 debug = False
