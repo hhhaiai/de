@@ -376,9 +376,9 @@ def is_chatgpt_format(data):
     return False
 
 
-if __name__ == '__main__':
-    # asyncio.run(get_model_names_from_js())
-    print(get_models())
+# if __name__ == '__main__':
+#     # asyncio.run(get_model_names_from_js())
+#     print(get_models())
 #
 #     # # support Chinese
 #     # if isinstance(response_content, str):  # 如果已经是 JSON 字符串
