@@ -12,6 +12,9 @@ from apscheduler.schedulers.background import BackgroundScheduler
 from fastapi import FastAPI, Request, HTTPException
 from fastapi.responses import JSONResponse
 from starlette.responses import HTMLResponse
+# 禁用 SSL 警告
+import urllib3
+urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
 import degpt as dg
 
@@ -21,7 +24,7 @@ debug = False
 app = FastAPI(
     title="ones",
     description="High-performance API service",
-    version="1.1.3|2025.1.11"
+    version="1.1.4|2025.1.12"
 )
 
 
@@ -312,6 +315,14 @@ class APIServer:
             if debug:
                 print("Routes changed, reloading...")
             self._reload_routes(new_routes)
+
+    # def _reload_routes(self, new_routes: List[str]) -> None:
+    #     """Reload the routes based on the updated configuration"""
+    #     # Clear existing routes
+    #     self.app.routes.clear()
+    #     # Register new routes
+    #     for path in new_routes:
+    #         self._register_route(path)
 
     def _reload_routes(self, new_routes: List[str]) -> None:
         """Reload only dynamic routes while preserving static ones"""
