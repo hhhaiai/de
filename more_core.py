@@ -1,5 +1,4 @@
 import json
-import json
 import multiprocessing
 import os
 import random
@@ -22,7 +21,7 @@ debug = False
 app = FastAPI(
     title="ones",
     description="High-performance API service",
-    version="1.1.1|2025.1.11"
+    version="1.1.3|2025.1.11"
 )
 
 
@@ -33,32 +32,40 @@ class APIServer:
         self.app = app
         self.encoding = tiktoken.get_encoding("cl100k_base")
         self._setup_routes()
-        self.scheduler = BackgroundScheduler()
-        self._schedule_route_check()
-        self.scheduler.start()
+        self._setup_scheduler()
 
+    def _setup_scheduler(self):
+        """ Schedule tasks to check and reload routes and models at regular intervals. """
+        self.scheduler = BackgroundScheduler()
+        # Scheduled Task 1: Check and reload routes every 30 seconds. Calls _reload_routes_if_needed method to check if routes need to be updated
+        self.scheduler.add_job(self._reload_routes_if_needed, 'interval', seconds=30)
+
+        # Scheduled Task 2: Reload models every 30 minutes (1800 seconds). This task will check and update the model data periodically
+        self.scheduler.add_job(self._reload_check, 'interval', seconds=60 * 30)
+        self.scheduler.start()
     def _setup_routes(self) -> None:
         """Initialize API routes"""
+        self.routes = """Initialize API routes"""
 
         # Static routes with names for filtering
         @self.app.get("/", name="root", include_in_schema=False)
-        async def root():
+        def root():
             return HTMLResponse(content="<h1>hello. It's home page.</h1>")
 
         @self.app.get("/web", name="web")
-        async def web():
+        def web():
             return HTMLResponse(content="<h1>hello. It's web page.</h1>")
 
         @self.app.get("/health", name="health")
-        async def health():
+        def health():
             return JSONResponse(content={"status": "working"})
 
 
         @self.app.get("/v1/models", name="models")
-        async def models():
+        def models():
             if debug:
                 print("Fetching models...")
-            models_str = await dg.get_models()
+            models_str = dg.get_models()
             try:
                 models_json = json.loads(models_str)
                 return JSONResponse(content=models_json)
@@ -105,11 +112,13 @@ class APIServer:
 
         async def chat_endpoint(request: Request) -> Dict[str, Any]:
             try:
+                if debug:
+                    print(f"Request chat_endpoint...")
                 headers = dict(request.headers)
                 data = await request.json()
                 if debug:
                     print(f"Request received...\r\n\tHeaders: {headers},\r\n\tData: {data}")
-                return await self._generate_response(headers, data)
+                return self._generate_response(headers, data)
             except Exception as e:
                 if debug:
                     print(f"Request processing error: {e}")
@@ -165,7 +174,7 @@ class APIServer:
             result['model'] = model  # 根据需要设置model值
         return result
 
-    async def _generate_response(self, headers: Dict[str, str], data: Dict[str, Any]) -> Dict[str, Any]:
+    def _generate_response(self, headers: Dict[str, str], data: Dict[str, Any]) -> Dict[str, Any]:
         """Generate API response"""
         global debug
         if debug:
@@ -176,7 +185,7 @@ class APIServer:
             # print(f"model: {model}")
             # just auto will check
             if "auto" == model:
-                model = await dg.get_auto_model()
+                model = dg.get_auto_model()
             # else:
             #     if not dg.is_model_available(model):
             #         raise HTTPException(status_code=400, detail="Invalid Model")
@@ -195,18 +204,16 @@ class APIServer:
 
             if debug:
                 print(f"request model: {model}")
-                print(f"request token: {token}")
+                if token:
+                    print(f"request token: {token}")
                 print(f"request messages: {msgs}")
 
-            result = await dg.chat_completion_messages(
+            result = dg.chat_completion_messages(
                 messages=msgs,
                 model=model
             )
             if debug:
                 print(f"result: {result}---- {self.is_chatgpt_format(result)}")
-
-            # # Assuming this 'result' comes from your model or some other logic
-            # result = "This is a test result."
 
             # If the request body data already matches ChatGPT format, return it directly
             if self.is_chatgpt_format(result):
@@ -246,7 +253,7 @@ class APIServer:
 
             return response_data
         except Exception as e:
-            await dg.record_call(model,False)
+            dg.record_call(model,False)
             if debug:
                 print(f"Response generation error: {e}")
             raise HTTPException(status_code=500, detail=str(e)) from e
@@ -287,23 +294,9 @@ class APIServer:
         server = uvicorn.Server(config)
         server.run()
 
-    async def _reload_check(self) -> None:
-        await dg.reload_check()
+    def _reload_check(self) -> None:
+        dg.reload_check()
 
-    def _schedule_route_check(self) -> None:
-        """
-        Schedule tasks to check and reload routes and models at regular intervals.
-        - Reload routes every 30 seconds.
-        - Reload models every 30 minutes.
-        """
-        # Scheduled Task 1: Check and reload routes every 30 seconds
-        # Calls _reload_routes_if_needed method to check if routes need to be updated
-        self.scheduler.add_job(self._reload_routes_if_needed, 'interval', seconds=30)
-
-        # Scheduled Task 2: Reload models every 30 minutes (1800 seconds)
-        # This task will check and update the model data periodically
-        self.scheduler.add_job(self._reload_check, 'interval', seconds=60 * 30)
-        pass
 
     def _reload_routes_if_needed(self) -> None:
         """Check if routes need to be reloaded based on environment variables"""
@@ -320,14 +313,6 @@ class APIServer:
                 print("Routes changed, reloading...")
             self._reload_routes(new_routes)
 
-    # def _reload_routes(self, new_routes: List[str]) -> None:
-    #     """Reload the routes based on the updated configuration"""
-    #     # Clear existing routes
-    #     self.app.routes.clear()
-    #     # Register new routes
-    #     for path in new_routes:
-    #         self._register_route(path)
-
     def _reload_routes(self, new_routes: List[str]) -> None:
         """Reload only dynamic routes while preserving static ones"""
         # Define static route names
@@ -342,6 +327,8 @@ class APIServer:
         # Register new dynamic routes
         for path in new_routes:
             self._register_route(path)
+
+
 
 
 def create_server() -> APIServer:

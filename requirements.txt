@@ -2,22 +2,15 @@
 fastapi
 uvicorn[standard]
 tiktoken
-playwright
 requests
 starlette
 pydantic
 
-# Async support
+# Performance optimization
 uvloop
 httptools
 aiohttp
-asyncio
 
-# Utils
+# Scheduling & Utils
 apscheduler
-python-json-logger
-typing-extensions
 python-dotenv
-
-# Optional performance optimization
-ujson
