@@ -22,8 +22,11 @@ cache_duration = 14400  # 缓存有效期，单位：秒 (4小时)
 cached_models = {
     "object": "list",
     "data": [],
-    "version": "",
-    "provider": "",
+    "version": "0.1.125",
+    "provider": "DeGPT",
+    "name": "DeGPT",
+    "default_locale": "en-US",
+    "status": True,
     "time": 0
 }
 
@@ -179,6 +182,9 @@ async def _fetch_and_update_models():
     global cached_models
     try:
         await get_model_names_from_js()
+    except Exception as e:
+       print(f"{e}")
+    try:
         get_alive_models()
     except Exception as e:
        print(f"{e}")
@@ -187,16 +193,6 @@ async def get_models():
     """Async model data retrieval with thread safety"""
     global cached_models, last_request_time
     current_time = time.time()
-
-    if cached_models is None:
-        cached_models = {
-            "object": "list",
-            "data": [],
-            "version": "",
-            "provider": "",
-            "time": 0
-        }
-
     if (current_time - last_request_time) > cache_duration:
         try:
             # Update timestamp before awaiting to prevent concurrent updates
@@ -229,6 +225,11 @@ def get_alive_models():
             timestamp_in_seconds = time.time()
             # 转换为毫秒（乘以 1000）
             timestamp_in_milliseconds = int(timestamp_in_seconds * 1000)
+            ## config
+            cached_models['version']=data['version']
+            cached_models['provider']=data['provider']
+            cached_models['name']=data['provider']
+            cached_models['time']=timestamp_in_milliseconds
 
             if default_models:
                 # print("\n提取的模型列表:")
@@ -302,7 +303,7 @@ async def get_model_names_from_js(url="https://www.degpt.ai/", timeout: int = 60
                         content_type = response.headers.get('content-type', '').lower()
                         if 'javascript' in content_type:
                             js_content = await response.text()
-                            if 'models' in js_content and 'DeepSeek' in js_content:
+                            if 'models' in js_content:
                                 # print(f"找到包含模型信息的JS文件: {response.url}")
                                 models = await parse_models_from_js(js_content)
                                 if models:
@@ -344,12 +345,48 @@ async def get_model_names_from_js(url="https://www.degpt.ai/", timeout: int = 60
                 await browser.close()
     except Exception as e:
         print(f"提取过程发生错误: {str(e)}")
-        logging.error(f"提取过程异常: {e}", exc_info=True)
+        await get_from_js()
         raise
 
+async def get_from_js():
+    import requests
+    import re
+    import json
+    global cached_models
+    # 获取 JavaScript 文件内容
+    # url = "https://www.degpt.ai/_app/immutable/chunks/index.83d92b06.js"
+    url = "https://www.degpt.ai/_app/immutable/chunks/index.4aecf75a.js"
+    response = requests.get(url)
+
+    if response.status_code == 200:
+        js_content = response.text
+        models = await parse_models_from_js(js_content)
+        if models:
+            # print("\n提取的模型列表:")
+            existing_ids = {m.get('id') for m in cached_models["data"]}
+            for model in models:
+                model_id = model.get('model', '').strip()
+                # print(f"- 名称: {model.get('name', '')}")
+                # print(f"  模型: {model.get('model', '')}")
+                # print(f"  描述: {model.get('desc', '')}")
+                record_call(model_id)
+                if model_id and model_id not in existing_ids:
+                    model_data = {
+                        "id": model_id,
+                        "object": "model",
+                        "model": model_id,
+                        "created": int(time.time()),
+                        "owned_by": model_id.split("-")[0] if "-" in model_id else "unknown",
+                        "name": model.get('name', ''),
+                        "description": model.get('desc', ''),
+                        "support": model.get('support', 'text'),
+                        "tip": model.get('tip', '')
+                    }
+                    cached_models["data"].append(model_data)
+                    # print(f"添加新模型: {model_id}")
 
 
-async  def is_model_available(model_id: str, cooldown_seconds: int = 300) -> bool:
+async def is_model_available(model_id: str, cooldown_seconds: int = 300) -> bool:
     """
     判断模型是否在模型列表中且非最近失败的模型
 
