@@ -6,16 +6,16 @@ import json
 import re
 import time
 from datetime import datetime, timedelta
+from typing import Set, Optional, List, Dict
+from urllib.parse import urljoin, urlparse
+
 import aiohttp
 import requests
-from bs4 import BeautifulSoup
-from urllib.parse import urljoin, urlparse
-from typing import Set, Optional, List, Dict
-
 # 禁用 SSL 警告
 import urllib3
-urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
+from bs4 import BeautifulSoup
 
+urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
 debug = False
 # 全局变量
@@ -50,6 +50,7 @@ base_model = "Pixtral-124B"
 # 全局变量：存储所有模型的统计信息
 # 格式：{model_name: {"calls": 调用次数, "fails": 失败次数, "last_fail": 最后失败时间}}
 MODEL_STATS: Dict[str, Dict] = {}
+
 
 def record_call(model_name: str, success: bool = True) -> None:
     """
@@ -188,11 +189,11 @@ def _fetch_and_update_models():
     try:
         get_from_js_v3()
     except Exception as e:
-       print(f"{e}")
+        print(f"{e}")
     try:
         get_alive_models()
     except Exception as e:
-       print(f"{e}")
+        print(f"{e}")
 
 
 def get_models():
@@ -208,6 +209,7 @@ def get_models():
             print(f"{e}")
 
     return json.dumps(cached_models)
+
 
 def get_alive_models():
     """
@@ -232,10 +234,10 @@ def get_alive_models():
             # 转换为毫秒（乘以 1000）
             timestamp_in_milliseconds = int(timestamp_in_seconds * 1000)
             ## config
-            cached_models['version']=data['version']
-            cached_models['provider']=data['provider']
-            cached_models['name']=data['provider']
-            cached_models['time']=timestamp_in_milliseconds
+            cached_models['version'] = data['version']
+            cached_models['provider'] = data['provider']
+            cached_models['name'] = data['provider']
+            cached_models['time'] = timestamp_in_milliseconds
 
             if default_models:
                 # print("\n提取的模型列表:")
@@ -285,7 +287,7 @@ def get_from_js_v3():
                     "id": model_id,
                     "object": "model",
                     "model": model_id,
-                    "created": int(time.time())*1000,
+                    "created": int(time.time()) * 1000,
                     "owned_by": model_id.split("-")[0] if "-" in model_id else "unknown",
                     "name": model.get('name', ''),
                     "description": model.get('desc', ''),
@@ -542,7 +544,6 @@ def analyze(_bb_url="https://www.degpt.ai/") -> List[Dict]:
     return found_models
 
 
-
 ################
 
 def is_model_available(model_id: str, cooldown_seconds: int = 300) -> bool:
@@ -689,28 +690,54 @@ def chat_completion_messages(
     }
     # print(json.dumps(headers, indent=4))
     # print(json.dumps(payload, indent=4))
-    return chat_completion(headers, payload)
+    return chat_completion(model, headers, payload)
 
 
-def chat_completion(headers, payload):
+def chat_completion(model, headers, payload):
     """处理用户请求并保留上下文"""
     try:
         url = f'{base_url}/v0/chat/completion/proxy'
         response = requests.post(url, headers=headers, json=payload)
         response.encoding = 'utf-8'
         response.raise_for_status()
+        if response.status_code != 200:
+            record_call(model, False)
+        else:
+            record_call(model, True)
         return response.json()
     except requests.exceptions.RequestException as e:
+        record_call(model, False)
         print(f"请求失败: {e}")
         return "请求失败，请检查网络或参数配置。"
     except (KeyError, IndexError) as e:
+        record_call(model, False)
         print(f"解析响应时出错: {e}")
         return "解析响应内容失败。"
+    record_call(model, False)
     return {}
 
-# if __name__ == '__main__':
-#     get_from_js_v3()
-#     print("get_models: ",get_models())
-#     print("cached_models:",cached_models)
-#     print("base_url: ",base_url)
-#     print("MODEL_STATS:",MODEL_STATS)
+
+if __name__ == '__main__':
+    get_from_js_v3()
+    print("get_models: ", get_models())
+    print("cached_models:", cached_models)
+    print("base_url: ", base_url)
+    print("MODEL_STATS:", MODEL_STATS)
+    result = chat_completion_message(user_prompt="你是什么模型？", model="Pixtral-124B")
+    print(result)
+
+    # 单次对话
+    result1 = chat_completion_message(
+        user_prompt="你好，请介绍下你自己",
+        model="Pixtral-124B",
+        temperature=0.3
+    )
+    print(result1)
+
+    # 多轮对话
+    messages = [
+        {"role": "system", "content": "你是一个助手"},
+        {"role": "user", "content": "你好"}
+    ]
+    result2 = chat_completion_messages(messages)
+    print(result2)
