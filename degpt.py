@@ -717,27 +717,27 @@ def chat_completion(model, headers, payload):
     return {}
 
 
-if __name__ == '__main__':
-    get_from_js_v3()
-    print("get_models: ", get_models())
-    print("cached_models:", cached_models)
-    print("base_url: ", base_url)
-    print("MODEL_STATS:", MODEL_STATS)
-    result = chat_completion_message(user_prompt="你是什么模型？", model="Pixtral-124B")
-    print(result)
+# if __name__ == '__main__':
+#     get_from_js_v3()
+#     print("get_models: ", get_models())
+#     print("cached_models:", cached_models)
+#     print("base_url: ", base_url)
+#     print("MODEL_STATS:", MODEL_STATS)
+#     result = chat_completion_message(user_prompt="你是什么模型？", model="Pixtral-124B")
+#     print(result)
 
-    # 单次对话
-    result1 = chat_completion_message(
-        user_prompt="你好，请介绍下你自己",
-        model="Pixtral-124B",
-        temperature=0.3
-    )
-    print(result1)
+#     # 单次对话
+#     result1 = chat_completion_message(
+#         user_prompt="你好，请介绍下你自己",
+#         model="Pixtral-124B",
+#         temperature=0.3
+#     )
+#     print(result1)
 
-    # 多轮对话
-    messages = [
-        {"role": "system", "content": "你是一个助手"},
-        {"role": "user", "content": "你好"}
-    ]
-    result2 = chat_completion_messages(messages)
-    print(result2)
+#     # 多轮对话
+#     messages = [
+#         {"role": "system", "content": "你是一个助手"},
+#         {"role": "user", "content": "你好"}
+#     ]
+#     result2 = chat_completion_messages(messages)
+#     print(result2)

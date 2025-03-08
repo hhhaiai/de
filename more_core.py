@@ -24,7 +24,7 @@ debug = False
 app = FastAPI(
     title="ones",
     description="High-performance API service",
-    version="1.1.5|2025.1.12"
+    version="1.1.7|2025.3.8"
 )
 
 
@@ -65,6 +65,18 @@ class APIServer:
 
 
         @self.app.get("/v1/models", name="models")
+        def models():
+            if debug:
+                print("Fetching models...")
+            models_str = dg.get_models()
+            try:
+                models_json = json.loads(models_str)
+                return JSONResponse(content=models_json)
+            except json.JSONDecodeError as e:
+                raise HTTPException(status_code=500,
+                                    detail=f"Invalid models data: {str(e)}")
+
+        @self.app.get("/api/v1/models", name="apimodels")
         def models():
             if debug:
                 print("Fetching models...")
@@ -327,7 +339,7 @@ class APIServer:
     def _reload_routes(self, new_routes: List[str]) -> None:
         """Reload only dynamic routes while preserving static ones"""
         # Define static route names
-        static_routes = {"root", "web", "health", "models"}
+        static_routes = {"root", "web", "health", "models", "apimodels"}
 
         # Remove only dynamic routes
         self.app.routes[:] = [
