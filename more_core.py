@@ -24,7 +24,7 @@ debug = False
 app = FastAPI(
     title="ones",
     description="High-performance API service",
-    version="1.1.7|2025.3.8"
+    version="1.1.9|2025.4.25"
 )
 
 
@@ -225,7 +225,8 @@ class APIServer:
 
             result = dg.chat_completion_messages(
                 messages=msgs,
-                model=model
+                model=model,
+                stream=False
             )
             if debug:
                 print(f"result: {result}---- {self.is_chatgpt_format(result)}")

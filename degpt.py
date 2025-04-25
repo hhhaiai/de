@@ -43,10 +43,10 @@ base_addrs = [
     "https://korea-chat.degpt.ai/api"
 ]
 '''基础域名'''
-base_url = 'https://singapore-chat.degpt.ai/api'
+base_url = 'https://usa-chat.degpt.ai/api'
 
 '''基础模型'''
-base_model = "Pixtral-124B"
+base_model = "QwQ-32B"
 # 全局变量：存储所有模型的统计信息
 # 格式：{model_name: {"calls": 调用次数, "fails": 失败次数, "last_fail": 最后失败时间}}
 MODEL_STATS: Dict[str, Dict] = {}
@@ -198,7 +198,7 @@ def _fetch_and_update_models():
 
 def get_models():
     """model data retrieval with thread safety"""
-    global cached_models, last_request_time
+    global cached_models, last_request_time, base_model, MODEL_STATS
     current_time = time.time()
     if (current_time - last_request_time) > cache_duration:
         try:
@@ -207,6 +207,24 @@ def get_models():
             _fetch_and_update_models()
         except Exception as e:
             print(f"{e}")
+
+     # 根据MODEL_STATS判断高成功率的模型并更新base_model
+    if MODEL_STATS:
+        best_model = None
+        best_rate = -1.0
+        
+        for name, stats in MODEL_STATS.items():
+            total_calls = stats["calls"]
+            if total_calls > 0:
+                success_rate = (total_calls - stats["fails"]) / total_calls
+                if success_rate > best_rate:
+                    best_rate = success_rate
+                    best_model = name
+        
+        if best_model:
+            base_model = best_model
+            if debug:
+                print(f"更新基础模型为: {base_model}")
 
     return json.dumps(cached_models)
 
@@ -281,7 +299,9 @@ def get_from_js_v3():
             # {'name': 'Llama3.3', 'model': 'Llama3.3-70B', 'tip': 'Llama3.3', 'support': 'text', 'desc': 'Suitable for most tasks'}
             if debug:
                 print(model)
-            model_id = model.get('model', '').strip()
+            model_id = model.get('textmodel', '').strip()
+            if not model_id:
+                model_id = model.get('model', '').strip()
             if model_id and model_id not in existing_ids:
                 model_data = {
                     "id": model_id,
@@ -638,8 +658,8 @@ def chat_completion_message(
         user_id: str = None,
         session_id: str = None,
         system_prompt="You are a helpful assistant.",
-        model=base_model,
-        project="DecentralGPT", stream=False,
+        model: str = None,
+        project="DecentralGPT", stream=True,
         temperature=0.3, max_tokens=1024, top_p=0.5,
         frequency_penalty=0, presence_penalty=0):
     """未来会增加回话隔离: 单人对话,单次会话"""
@@ -647,53 +667,75 @@ def chat_completion_message(
         {"role": "system", "content": system_prompt},
         {"role": "user", "content": user_prompt}
     ]
-    return chat_completion_messages(messages, user_id, session_id, model, project, stream, temperature, max_tokens,
-                                    top_p, frequency_penalty,
-                                    presence_penalty)
-
+    return chat_completion_messages(messages, user_id=user_id, session_id=session_id,
+                                    model=model, project=project, stream=stream, temperature=temperature,
+                                    max_tokens=max_tokens, top_p=top_p, frequency_penalty=frequency_penalty,
+                                    presence_penalty=presence_penalty)
 
 def chat_completion_messages(
-        messages,
-        model=base_model,
+        messages,stream,
+        model: str = None,
         user_id: str = None,
         session_id: str = None,
-        project="DecentralGPT", stream=False, temperature=0.3, max_tokens=1024, top_p=0.5,
+        project="DecentralGPT",
+        temperature=0.3, max_tokens=1024, top_p=0.5,
         frequency_penalty=0, presence_penalty=0):
     # 确保model有效
     if not model or model == "auto":
         model = get_auto_model()
-    else:
-        model = get_model_by_autoupdate(model)
+    # else:
+    #     model = get_model_by_autoupdate(model)
     if debug:
         print(f"校准后的model: {model}")
     headers = {
-        'sec-ch-ua-platform': '"macOS"',
-        'Referer': 'https://www.degpt.ai/',
-        'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36',
-        'sec-ch-ua': 'Google Chrome";v="131", "Chromium";v="131", "Not_A Brand";v="24"',
-        'DNT': '1',
+        'Accept': '*/*',
+        'Accept-Language': 'en-US,en;q=0.9,zh-CN;q=0.8,zh;q=0.7',
         'Content-Type': 'application/json',
-        'sec-ch-ua-mobile': '?0'
+        'Connection': 'keep-alive',
+        'Origin': 'https://www.degpt.ai',
+        'Referer': 'https://www.degpt.ai/',
+        'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/135.0.0.0 Safari/537.36',
+        'sec-ch-ua': '"Google Chrome";v="135", "Not-A.Brand";v="8", "Chromium";v="135"',
+        'sec-ch-ua-mobile':'?0',
+        'Sec-Fetch-Dest':'empty',
+        'Sec-Fetch-Mode':'cors',
+        'Sec-Fetch-Site':'same-site'
     }
     payload = {
         # make sure ok
         "model": model,
         "messages": messages,
         "project": project,
-        "stream": stream,
+        "stream": stream
+        # "stream": False
+        ,
         "temperature": temperature,
         "max_tokens": max_tokens,
         "top_p": top_p,
         "frequency_penalty": frequency_penalty,
         "presence_penalty": presence_penalty
-
     }
-    # print(json.dumps(headers, indent=4))
-    # print(json.dumps(payload, indent=4))
-    return chat_completion(model, headers, payload)
+    if debug:
+        print(json.dumps(headers, indent=4))
+        print(json.dumps(payload, indent=4))
+    return chat_completion(model=model, headers=headers, payload=payload,stream=stream)
 
 
-def chat_completion(model, headers, payload):
+
+# def parse_response(response_text):
+#     """
+#     逐行解析
+#     """
+#     lines = response_text.split('\n')
+#     result = ""
+#     for line in lines:
+#         if line.startswith("data:"):
+#             data = json.loads(line[len("data:"):])
+#             if "message" in data:
+#                 result += data["message"]
+#     print(result)
+
+def chat_completion(model, headers, payload,stream):
     """处理用户请求并保留上下文"""
     try:
         url = f'{base_url}/v0/chat/completion/proxy'
@@ -704,7 +746,12 @@ def chat_completion(model, headers, payload):
             record_call(model, False)
         else:
             record_call(model, True)
-        return response.json()
+
+        if debug:
+            print(response.status_code)
+            print(response.text)
+        # return response.json()
+        return response.text
     except requests.exceptions.RequestException as e:
         record_call(model, False)
         print(f"请求失败: {e}")
@@ -717,27 +764,43 @@ def chat_completion(model, headers, payload):
     return {}
 
 
-# if __name__ == '__main__':
-#     get_from_js_v3()
-#     print("get_models: ", get_models())
-#     print("cached_models:", cached_models)
-#     print("base_url: ", base_url)
-#     print("MODEL_STATS:", MODEL_STATS)
-#     result = chat_completion_message(user_prompt="你是什么模型？", model="Pixtral-124B")
-#     print(result)
+if __name__ == '__main__':
+    get_from_js_v3()
+    print("get_models: ", get_models())
+    print("cached_models:", cached_models)
+    print("base_url: ", base_url)
+    print("MODEL_STATS:", MODEL_STATS)
+    print("base_model:",base_model)
+    # base_model = "QwQ-32B"
+    result = chat_completion_message(user_prompt="你是什么模型？", model=base_model,stream=False)
+    print(result)
 
-#     # 单次对话
-#     result1 = chat_completion_message(
-#         user_prompt="你好，请介绍下你自己",
-#         model="Pixtral-124B",
-#         temperature=0.3
-#     )
-#     print(result1)
+    # base_model="Llama-4-Scout-Instruct"
+    # result = chat_completion_message(user_prompt="你是什么模型？", model=base_model, stream=False)
+    # print(result)
 
-#     # 多轮对话
-#     messages = [
-#         {"role": "system", "content": "你是一个助手"},
-#         {"role": "user", "content": "你好"}
-#     ]
-#     result2 = chat_completion_messages(messages)
-#     print(result2)
+    # # 单次对话
+    # result1 = chat_completion_message(
+    #     user_prompt="你好，请介绍下你自己",
+    #     # model=base_model,
+    #     temperature=0.3
+    # )
+    # print(result1)
+
+    # # 多轮对话
+    # messages = [
+    #     {"role": "system", "content": "你是一个助手"},
+    #     {"role": "user", "content": "你好"}
+    # ]
+    # result2 = chat_completion_messages(messages)
+    # print(result2)
+    
+ #    msg="""
+ #    json 格式化
+ # {"object": "list", "data": [{"id": "Qwen2.5-VL-72B-Instruct", "object": "model", "model": "Qwen2.5-VL-72B-Instruct", "created": 1744090984000, "owned_by": "Qwen2.5", "name": "Qwen o1", "description": "Deep thinking,mathematical and writing abilities \u2248 o3, taking photos to solve math problems", "support": "image", "tip": "Qwen o1"}, {"id": "DeepSeek-R1", "object": "model", "model": "DeepSeek-R1", "created": 1744090984000, "owned_by": "DeepSeek", "name": "DeepSeek R1", "description": "Deep thinking,mathematical and writing abilities \u2248 o3", "support": "text", "tip": "DeepSeek R1"}, {"id": "Llama3.3-70B", "object": "model", "model": "Llama3.3-70B", "created": 1744090984000, "owned_by": "Llama3.3", "name": "Llama3.3", "description": "Suitable for most tasks", "support": "text", "tip": "Llama3.3"}], "version": "0.1.125", "provider": "DeGPT", "name": "DeGPT", "default_locale": "en-US", "status": true, "time": 0}
+ #    """
+ #    ress = chat_completion_message(user_prompt=msg)
+ #    print(ress)
+ #    print(type(ress))
+ #    print("\r\n----------\r\n\r\n")
+
