@@ -17,7 +17,7 @@ from bs4 import BeautifulSoup
 
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
-debug = False
+debug = True
 # 全局变量
 last_request_time = 0  # 上次请求的时间戳
 cache_duration = 14400  # 缓存有效期，单位：秒 (4小时)
@@ -212,7 +212,7 @@ def get_models():
     if MODEL_STATS:
         best_model = None
         best_rate = -1.0
-        
+
         for name, stats in MODEL_STATS.items():
             total_calls = stats["calls"]
             if total_calls > 0:
@@ -220,7 +220,7 @@ def get_models():
                 if success_rate > best_rate:
                     best_rate = success_rate
                     best_model = name
-        
+
         if best_model:
             base_model = best_model
             if debug:
@@ -794,7 +794,7 @@ if __name__ == '__main__':
     # ]
     # result2 = chat_completion_messages(messages)
     # print(result2)
-    
+
  #    msg="""
  #    json 格式化
  # {"object": "list", "data": [{"id": "Qwen2.5-VL-72B-Instruct", "object": "model", "model": "Qwen2.5-VL-72B-Instruct", "created": 1744090984000, "owned_by": "Qwen2.5", "name": "Qwen o1", "description": "Deep thinking,mathematical and writing abilities \u2248 o3, taking photos to solve math problems", "support": "image", "tip": "Qwen o1"}, {"id": "DeepSeek-R1", "object": "model", "model": "DeepSeek-R1", "created": 1744090984000, "owned_by": "DeepSeek", "name": "DeepSeek R1", "description": "Deep thinking,mathematical and writing abilities \u2248 o3", "support": "text", "tip": "DeepSeek R1"}, {"id": "Llama3.3-70B", "object": "model", "model": "Llama3.3-70B", "created": 1744090984000, "owned_by": "Llama3.3", "name": "Llama3.3", "description": "Suitable for most tasks", "support": "text", "tip": "Llama3.3"}], "version": "0.1.125", "provider": "DeGPT", "name": "DeGPT", "default_locale": "en-US", "status": true, "time": 0}
@@ -803,4 +803,3 @@ if __name__ == '__main__':
  #    print(ress)
  #    print(type(ress))
  #    print("\r\n----------\r\n\r\n")
-
