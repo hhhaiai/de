@@ -24,7 +24,7 @@ debug = False
 app = FastAPI(
     title="ones",
     description="High-performance API service",
-    version="1.2.0|2025.5.4"
+    version="1.2.1|2025.6.18"
 )
 
 

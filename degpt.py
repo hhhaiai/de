@@ -8,45 +8,46 @@ import time
 from datetime import datetime, timedelta
 from typing import Set, Optional, List, Dict
 from urllib.parse import urljoin, urlparse
-
+from bs4 import BeautifulSoup
 import aiohttp
 import requests
 # 禁用 SSL 警告
 import urllib3
-from bs4 import BeautifulSoup
-
-urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
+from urllib3.exceptions import InsecureRequestWarning
+urllib3.disable_warnings(InsecureRequestWarning)
+urllib3.disable_warnings()
 
 debug = True
 # 全局变量
 last_request_time = 0  # 上次请求的时间戳
 cache_duration = 14400  # 缓存有效期，单位：秒 (4小时)
+
 '''用于存储缓存的模型数据'''
 cached_models = {
     "object": "list",
     "data": [],
-    "version": "0.1.125",
+    "version": "1.2.1",
     "provider": "DeGPT",
     "name": "DeGPT",
     "default_locale": "en-US",
     "status": True,
-    "time": 0
+    "time": 20250618
 }
 
-'''基础请求地址'''
-base_addrs = [
-    # "America"
-    "https://usa-chat.degpt.ai/api",
-    # "Singapore"
-    "https://singapore-chat.degpt.ai/api",
-    # "Korea"
-    "https://korea-chat.degpt.ai/api"
-]
+# '''基础请求地址'''
+# base_addrs = [
+#     # "America"
+#     "https://usa-chat.degpt.ai/api",
+#     # "Singapore"
+#     "https://singapore-chat.degpt.ai/api",
+#     # "Korea"
+#     "https://korea-chat.degpt.ai/api"
+# ]
 '''基础域名'''
-base_url = 'https://usa-chat.degpt.ai/api'
+base_url = 'https://www.degpt.ai/api'
 
 '''基础模型'''
-base_model = "QwQ-32B"
+base_model = "qwen3-235b-a22b"
 # 全局变量：存储所有模型的统计信息
 # 格式：{model_name: {"calls": 调用次数, "fails": 失败次数, "last_fail": 最后失败时间}}
 MODEL_STATS: Dict[str, Dict] = {}
@@ -114,69 +115,6 @@ def reload_check():
             if debug:
                 print("模型数据为空，开始更新...")
             get_models()
-
-        # 测试用例 - 平衡效率和功能验证
-        test_payload = {
-            "model": base_model,
-            "messages": [{
-                "role": "user",
-                "content": [{"type": "text", "text": "test"}]
-            }],
-            "temperature": 0.7,
-            "max_tokens": 50,
-            "top_p": 1.0,
-            "frequency_penalty": 0.0,
-            "project": "DecentralGPT",
-            "stream": True
-        }
-
-        headers = {
-            'Accept': '*/*',
-            'Content-Type': 'application/json'
-        }
-
-        with aiohttp.ClientSession() as session:
-            # 测试当前URL
-            try:
-                with session.post(
-                        f"{base_url}/v0/chat/completion/proxy",
-                        headers=headers,
-                        json=test_payload,
-                        timeout=5  # 较短的超时时间提高效率
-                ) as response:
-                    if response.status == 200:
-                        # 验证响应格式
-                        if response.read():
-                            if debug:
-                                print(f"当前URL可用: {base_url}")
-                            return
-            except Exception as e:
-                if debug:
-                    print(f"当前URL不可用: {e}")
-
-            # 测试其他URL
-            for url in base_addrs:
-                if url == base_url:
-                    continue
-                try:
-                    with session.post(
-                            f"{url}/v0/chat/completion/proxy",
-                            headers=headers,
-                            json=test_payload,
-                            timeout=5
-                    ) as response:
-                        if response.status == 200 and response.read():
-                            base_url = url
-                            if debug:
-                                print(f"切换到新URL: {base_url}")
-                            return
-                except Exception as e:
-                    if debug:
-                        print(f"URL {url} 测试失败: {e}")
-                    continue
-
-            if debug:
-                print("所有URL不可用，保持当前URL")
 
     except Exception as e:
         if debug:
@@ -687,38 +625,58 @@ def chat_completion_messages(
     #     model = get_model_by_autoupdate(model)
     if debug:
         print(f"校准后的model: {model}")
+    #
+    # 获取
+    url = 'https://www.degpt.ai/api/v1/auths/printSignIn'
+
     headers = {
-        'Accept': '*/*',
-        'Accept-Language': 'en-US,en;q=0.9,zh-CN;q=0.8,zh;q=0.7',
-        'Content-Type': 'application/json',
-        'Connection': 'keep-alive',
-        'Origin': 'https://www.degpt.ai',
-        'Referer': 'https://www.degpt.ai/',
-        'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/135.0.0.0 Safari/537.36',
-        'sec-ch-ua': '"Google Chrome";v="135", "Not-A.Brand";v="8", "Chromium";v="135"',
-        'sec-ch-ua-mobile':'?0',
-        'Sec-Fetch-Dest':'empty',
-        'Sec-Fetch-Mode':'cors',
-        'Sec-Fetch-Site':'same-site'
+        "user-agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/137.0.0.0 Safari/537.36"
     }
-    payload = {
-        # make sure ok
+
+    data = {
+        "id": "b39fdee47a6bdbab5bc6827ac954c422",
+        "channel": ""
+    }
+    res_page = requests.post(url=url, headers=headers, json=data, verify=False, timeout=5)
+    res_page.encoding="utf-8"
+    token = json.loads(res_page.text)["token"]
+    if debug:
+        print(f"res_page: {res_page}\r\nres_page.text: {res_page.text}\r\ntoken:{token}")
+
+    headers_proxy = {
+        "Host": "www.degpt.ai",
+        "Connection": "keep-alive",
+        "Content-Length": "1673",
+        "Pragma": "no-cache",
+        "Cache-Control": "no-cache",
+        "sec-ch-ua-platform": "\"Windows\"",
+        "Authorization": f"Bearer {token}",
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/137.0.0.0 Safari/537.36",
+        "sec-ch-ua": "\"Google Chrome\";v=\"137\", \"Chromium\";v=\"137\", \"Not/A)Brand\";v=\"24\"",
+        "Content-Type": "application/json",
+        "sec-ch-ua-mobile": "?0",
+        "Accept": "*/*",
+        "Origin": "https://www.degpt.ai",
+        "Sec-Fetch-Site": "same-origin",
+        "Sec-Fetch-Mode": "cors",
+        "Sec-Fetch-Dest": "empty",
+        "Referer": "https://www.degpt.ai/c/e850c81f-19ab-4ac1-92ec-ee02c21095c7",
+        "Accept-Encoding": "gzip, deflate, br, zstd",
+        "Accept-Language": "zh-CN,zh;q=0.9",
+        "Cookie": "_ga=GA1.1.486456891.1750229584; _ga_ELT9ER83T2=GS2.1.s1750229583$o1$g1$t1750229594$j49$l0$h0"
+    }
+    data_proxy = {
         "model": model,
         "messages": messages,
+        "stream": False,
         "project": project,
-        "stream": stream
-        # "stream": False
-        ,
-        "temperature": temperature,
-        "max_tokens": max_tokens,
-        "top_p": top_p,
-        "frequency_penalty": frequency_penalty,
-        "presence_penalty": presence_penalty
+        "max_tokens": 50,
+        "enable_thinking": False
     }
     if debug:
         print(json.dumps(headers, indent=4))
-        print(json.dumps(payload, indent=4))
-    return chat_completion(model=model, headers=headers, payload=payload,stream=stream)
+        print(json.dumps(data_proxy, indent=4))
+    return chat_completion(model=model, headers=headers_proxy, payload=data_proxy,stream=stream)
 
 
 
@@ -738,8 +696,10 @@ def chat_completion_messages(
 def chat_completion(model, headers, payload,stream):
     """处理用户请求并保留上下文"""
     try:
-        url = f'{base_url}/v0/chat/completion/proxy'
-        response = requests.post(url, headers=headers, json=payload)
+        url = f'{base_url}/v1/chat/completion/proxy'
+        if debug:
+            print(f"url: {url}")
+        response = requests.post(url=url, headers=headers, json=payload, verify=False, timeout=100)
         response.encoding = 'utf-8'
         response.raise_for_status()
         if response.status_code != 200:
@@ -765,12 +725,12 @@ def chat_completion(model, headers, payload,stream):
 
 
 if __name__ == '__main__':
-    get_from_js_v3()
-    print("get_models: ", get_models())
-    print("cached_models:", cached_models)
-    print("base_url: ", base_url)
-    print("MODEL_STATS:", MODEL_STATS)
-    print("base_model:",base_model)
+    # get_from_js_v3()
+    # print("get_models: ", get_models())
+    # print("cached_models:", cached_models)
+    # print("base_url: ", base_url)
+    # print("MODEL_STATS:", MODEL_STATS)
+    # print("base_model:",base_model)
     # base_model = "QwQ-32B"
     result = chat_completion_message(user_prompt="你是什么模型？", model=base_model,stream=False)
     print(result)
