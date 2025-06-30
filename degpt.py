@@ -1,6 +1,44 @@
 """
-update time: 2025.01.09
-verson: 0.1.125
+update time: 2025.06.30
+
+
+curl 'https://www.degpt.ai/api/v1/auths/printSignIn' \
+  -H 'accept: */*' \
+  -H 'accept-language: en-US,en;q=0.9,zh-CN;q=0.8,zh;q=0.7' \
+  -H 'content-type: application/json' \
+  -b '_ga=GA1.1.761121180.1732095521; _ga_ELT9ER83T2=GS2.1.s1751282755$o102$g1$t1751282770$j45$l0$h0' \
+  -H 'dnt: 1' \
+  -H 'origin: https://www.degpt.ai' \
+  -H 'priority: u=1, i' \
+  -H 'referer: https://www.degpt.ai/' \
+  -H 'sec-ch-ua: "Google Chrome";v="137", "Chromium";v="137", "Not/A)Brand";v="24"' \
+  -H 'sec-ch-ua-mobile: ?0' \
+  -H 'sec-ch-ua-platform: "macOS"' \
+  -H 'sec-fetch-dest: empty' \
+  -H 'sec-fetch-mode: cors' \
+  -H 'sec-fetch-site: same-origin' \
+  -H 'user-agent: Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/137.0.0.0 Safari/537.36' \
+  --data-raw '{"id":"a831158117fd7a6fbb7da40cce1e27e9","channel":""}'
+
+curl 'https://www.degpt.ai/api/v1/chat/completion/proxy' \
+  -H 'accept: */*' \
+  -H 'accept-language: en-US,en;q=0.9,zh-CN;q=0.8,zh;q=0.7' \
+  -H 'authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6IjRiOWEzMTc5YzJkMDZkYzZhNThmNTJlOGY5NTk0NDk4IiwiZXhwIjoxNzUxODg3NTUxfQ.MyxL_rTULm8OFbW4-YA468Ih0pocqyQzhfjw9Hovx-8' \
+  -H 'content-type: application/json' \
+  -b '_ga=GA1.1.761121180.1732095521; _ga_ELT9ER83T2=GS2.1.s1751282755$o102$g1$t1751282770$j45$l0$h0' \
+  -H 'dnt: 1' \
+  -H 'origin: https://www.degpt.ai' \
+  -H 'priority: u=1, i' \
+  -H 'referer: https://www.degpt.ai/c/a42b3e39-b0c8-467c-819b-ff5415dd786f' \
+  -H 'sec-ch-ua: "Google Chrome";v="137", "Chromium";v="137", "Not/A)Brand";v="24"' \
+  -H 'sec-ch-ua-mobile: ?0' \
+  -H 'sec-ch-ua-platform: "macOS"' \
+  -H 'sec-fetch-dest: empty' \
+  -H 'sec-fetch-mode: cors' \
+  -H 'sec-fetch-site: same-origin' \
+  -H 'user-agent: Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/137.0.0.0 Safari/537.36' \
+  --data-raw '{"model":"gpt-4o-mini","messages":[{"role":"user","content":"你是什么模型"},{"role":"user","content":"hi"}],"enable_thinking":false,"project":"DecentralGPT","stream":true}'
+
 """
 import json
 import re
@@ -26,28 +64,20 @@ cache_duration = 14400  # 缓存有效期，单位：秒 (4小时)
 cached_models = {
     "object": "list",
     "data": [],
-    "version": "1.2.1",
+    "version": "1.2.2",
     "provider": "DeGPT",
     "name": "DeGPT",
     "default_locale": "en-US",
     "status": True,
-    "time": 20250618
+    "time": 20250630
 }
 
-# '''基础请求地址'''
-# base_addrs = [
-#     # "America"
-#     "https://usa-chat.degpt.ai/api",
-#     # "Singapore"
-#     "https://singapore-chat.degpt.ai/api",
-#     # "Korea"
-#     "https://korea-chat.degpt.ai/api"
-# ]
+
 '''基础域名'''
 base_url = 'https://www.degpt.ai/api'
 
 '''基础模型'''
-base_model = "qwen3-235b-a22b"
+base_model = "gpt-4o-mini"
 # 全局变量：存储所有模型的统计信息
 # 格式：{model_name: {"calls": 调用次数, "fails": 失败次数, "last_fail": 最后失败时间}}
 MODEL_STATS: Dict[str, Dict] = {}
@@ -602,7 +632,7 @@ def chat_completion_message(
         frequency_penalty=0, presence_penalty=0):
     """未来会增加回话隔离: 单人对话,单次会话"""
     messages = [
-        {"role": "system", "content": system_prompt},
+        # {"role": "system", "content": system_prompt},
         {"role": "user", "content": user_prompt}
     ]
     return chat_completion_messages(messages, user_id=user_id, session_id=session_id,
@@ -611,7 +641,7 @@ def chat_completion_message(
                                     presence_penalty=presence_penalty)
 
 def chat_completion_messages(
-        messages,stream,
+        messages,stream=True,
         model: str = None,
         user_id: str = None,
         session_id: str = None,
@@ -668,9 +698,8 @@ def chat_completion_messages(
     data_proxy = {
         "model": model,
         "messages": messages,
-        "stream": False,
+        "stream": True,
         "project": project,
-        "max_tokens": 50,
         "enable_thinking": False
     }
     if debug:
@@ -679,21 +708,75 @@ def chat_completion_messages(
     return chat_completion(model=model, headers=headers_proxy, payload=data_proxy,stream=stream)
 
 
+def parse_response(response_text):
+    """
+    逐行解析SSE流式响应并提取delta.content字段
+    包含多层结构校验，确保安全访问嵌套字段
+    返回标准API响应格式
+    """
+    lines = response_text.split('\n')
+    result = ""
+    created = None
+    object_type = None
+    
+    for line in lines:
+        if line.startswith("data:"):
+            data_str = line[len("data:"):].strip()
+            if not data_str or data_str == "[DONE]":
+                continue
+            try:
+                data = json.loads(data_str)
+                # 提取第一个data行的元信息
+                if isinstance(data, dict) and not created:
+                    created = data.get("created")
+                    object_type = data.get("object")
+                
+                # 安全访问嵌套字段，确保是字典类型
+                if isinstance(data, dict):
+                    # 检查是否存在choices字段且为列表
+                    if "choices" in data and isinstance(data["choices"], list):
+                        for choice in data["choices"]:
+                            # 检查每个choice是否为字典且包含delta字段
+                            if isinstance(choice, dict) and "delta" in choice:
+                                delta = choice["delta"]
+                                # 确保delta是字典且包含content字段
+                                if isinstance(delta, dict) and "content" in delta:
+                                    content = delta["content"]
+                                    # 确保content是字符串类型
+                                    if isinstance(content, str):
+                                        result += content
+            except json.JSONDecodeError:
+                continue
+    import tiktoken
 
-# def parse_response(response_text):
-#     """
-#     逐行解析
-#     """
-#     lines = response_text.split('\n')
-#     result = ""
-#     for line in lines:
-#         if line.startswith("data:"):
-#             data = json.loads(line[len("data:"):])
-#             if "message" in data:
-#                 result += data["message"]
-#     print(result)
+    # 计算token数量
+    enc = tiktoken.get_encoding("cl100k_base")
+    completion_tokens = len(enc.encode(result))
+    
+    # 组装标准响应数据
+    response_data = {
+        "id": f"chatcmpl-{datetime.now().timestamp()}",
+        "object": object_type or "chat.completion",
+        "created": created or int(datetime.now().timestamp()),
+        "model": "gpt-4o",  # 可根据需求调整来源
+        "usage": {
+            "prompt_tokens": 0,  # 需要根据实际prompt内容计算
+            "completion_tokens": completion_tokens,
+            "total_tokens": completion_tokens
+        },
+        "choices": [{
+            "message": {
+                "role": "assistant",
+                "content": result
+            },
+            "finish_reason": "stop",
+            "index": 0
+        }]
+    }
+    
+    return response_data
 
-def chat_completion(model, headers, payload,stream):
+def chat_completion(model, headers, payload,stream=True):
     """处理用户请求并保留上下文"""
     try:
         url = f'{base_url}/v1/chat/completion/proxy'
@@ -710,8 +793,11 @@ def chat_completion(model, headers, payload,stream):
         if debug:
             print(response.status_code)
             print(response.text)
-        # return response.json()
-        return response.text
+        # if stream:
+        #     if debug:
+        #         print('this is streaming')
+        return parse_response(response.text)
+        # return response.text
     except requests.exceptions.RequestException as e:
         record_call(model, False)
         print(f"请求失败: {e}")
@@ -732,12 +818,22 @@ if __name__ == '__main__':
     # print("MODEL_STATS:", MODEL_STATS)
     # print("base_model:",base_model)
     # base_model = "QwQ-32B"
-    result = chat_completion_message(user_prompt="你是什么模型？", model=base_model,stream=False)
-    print(result)
 
-    # base_model="Llama-4-Scout-Instruct"
-    # result = chat_completion_message(user_prompt="你是什么模型？", model=base_model, stream=False)
-    # print(result)
+    models = [
+        base_model,
+        "deepseek-chat",
+        "doubao-seed-1-6-250615",
+        "qwen3-235b-a22b",
+        "gpt-4o",
+        "deepseek-reasoner",
+        "gemini-2.5-flash-preview-05-20",
+        "grok-3"
+    ]
+
+    for model in models:
+        result = chat_completion_message(user_prompt="你是什么模型？", model=model, stream=False)
+        print(f"模型 {model} 的响应：{result}")
+
 
     # # 单次对话
     # result1 = chat_completion_message(
