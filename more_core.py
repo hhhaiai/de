@@ -88,6 +88,20 @@ class APIServer:
                 raise HTTPException(status_code=500,
                                     detail=f"Invalid models data: {str(e)}")
 
+        @self.app.post("/api/v1/session/clear", name="clear_session")
+        async def clear_session(request: Request):
+            """清除特定会话"""
+            try:
+                data = await request.json()
+                session_id = data.get("session_id")
+                if session_id:
+                    dg.clear_session(session_id)
+                    return JSONResponse(content={"status": "success", "message": f"Session {session_id} cleared"})
+                else:
+                    raise HTTPException(status_code=400, detail="session_id is required")
+            except Exception as e:
+                raise HTTPException(status_code=500, detail=str(e))
+
         # Register dynamic chat completion routes
         routes = self._get_routes()
         if debug:
@@ -150,6 +164,12 @@ class APIServer:
         letters_str = ''.join(random.choices(string.ascii_lowercase, k=letters))
         numbers_str = ''.join(random.choices(string.digits, k=numbers))
         return f"chatcmpl-{letters_str}{numbers_str}"
+
+    def _generate_session_id(self) -> str:
+        """Generate unique session ID for single conversation"""
+        letters_str = ''.join(random.choices(string.ascii_lowercase, k=8))
+        numbers_str = ''.join(random.choices(string.digits, k=4))
+        return f"session_{letters_str}{numbers_str}"
 
     def is_chatgpt_format(self, data):
         """Check if the data is in the expected ChatGPT format"""
@@ -217,6 +237,18 @@ class APIServer:
             if not msgs:
                 raise HTTPException(status_code=400, detail="消息不能为空")
 
+            # 获取会话ID - 支持session_id和user_id参数
+            session_id = data.get("session_id")
+            user_id = data.get("user_id")
+            
+            # 如果没有提供session_id，但提供了user_id，则使用user_id作为session_id
+            if not session_id and user_id:
+                session_id = f"user_{user_id}"
+            
+            # 如果都没有提供，生成一个临时的session_id用于单次对话
+            if not session_id:
+                session_id = self._generate_session_id()
+
             # 检查是否需要流式响应
             stream = data.get("stream", False)
             
@@ -225,6 +257,8 @@ class APIServer:
                 if token:
                     print(f"request token: {token}")
                 print(f"request messages: {msgs}")
+                print(f"session_id: {session_id}")
+                print(f"user_id: {user_id}")
                 print(f"stream: {stream}")
 
             if stream:
@@ -232,6 +266,7 @@ class APIServer:
                 response = dg.chat_completion_messages(
                     messages=msgs,
                     model=model,
+                    session_id=session_id,
                     stream=True
                 )
                 
@@ -245,6 +280,7 @@ class APIServer:
                 result = dg.chat_completion_messages(
                     messages=msgs,
                     model=model,
+                    session_id=session_id,
                     stream=False
                 )
                 if debug:

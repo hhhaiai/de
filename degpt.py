@@ -60,6 +60,10 @@ debug = True
 last_request_time = 0  # 上次请求的时间戳
 cache_duration = 14400  # 缓存有效期，单位：秒 (4小时)
 
+# 会话管理 - 存储对话上下文
+SESSION_STORAGE = {}
+SESSION_TIMEOUT = 1800  # 会话超时时间30分钟
+
 '''用于存储缓存的模型数据'''
 cached_models = {
     "object": "list",
@@ -99,6 +103,49 @@ def record_call(model_name: str, success: bool = True) -> None:
     if not success:
         stats["fails"] += 1
         stats["last_fail"] = datetime.now()
+
+
+def get_session(session_id: str) -> List[Dict]:
+    """获取或创建会话上下文"""
+    global SESSION_STORAGE
+    
+    # 清理过期会话
+    cleanup_sessions()
+    
+    if session_id not in SESSION_STORAGE:
+        SESSION_STORAGE[session_id] = {
+            "messages": [],
+            "last_activity": datetime.now()
+        }
+    else:
+        SESSION_STORAGE[session_id]["last_activity"] = datetime.now()
+    
+    return SESSION_STORAGE[session_id]["messages"]
+
+
+def cleanup_sessions() -> None:
+    """清理过期会话"""
+    global SESSION_STORAGE
+    now = datetime.now()
+    
+    expired_sessions = []
+    for session_id, session_data in SESSION_STORAGE.items():
+        if (now - session_data["last_activity"]).total_seconds() > SESSION_TIMEOUT:
+            expired_sessions.append(session_id)
+    
+    for session_id in expired_sessions:
+        del SESSION_STORAGE[session_id]
+        if debug:
+            print(f"清理过期会话: {session_id}")
+
+
+def clear_session(session_id: str) -> None:
+    """清除特定会话"""
+    global SESSION_STORAGE
+    if session_id in SESSION_STORAGE:
+        del SESSION_STORAGE[session_id]
+        if debug:
+            print(f"清除会话: {session_id}")
 
 
 def get_auto_model(cooldown_seconds: int = 300) -> str:
@@ -655,8 +702,19 @@ def chat_completion_messages(
     #     model = get_model_by_autoupdate(model)
     if debug:
         print(f"校准后的model: {model}")
-    #
-    # 获取
+    
+    # 处理会话上下文
+    if session_id:
+        session_messages = get_session(session_id)
+        # 合并历史消息和当前消息
+        combined_messages = session_messages + messages
+        if debug:
+            print(f"会话 {session_id} 的历史消息: {len(session_messages)} 条")
+            print(f"合并后的消息: {len(combined_messages)} 条")
+    else:
+        combined_messages = messages
+    
+    # 获取token
     url = 'https://www.degpt.ai/api/v1/auths/printSignIn'
 
     headers = {
@@ -698,7 +756,7 @@ def chat_completion_messages(
     # 后端服务只支持流式调用
     data_proxy = {
         "model": model,
-        "messages": messages,
+        "messages": combined_messages,
         "stream": True,  # 始终使用流式调用后端
         "project": project,
         "enable_thinking": False
@@ -706,7 +764,7 @@ def chat_completion_messages(
     if debug:
         print(json.dumps(headers, indent=4))
         print(json.dumps(data_proxy, indent=4))
-    return chat_completion(model=model, headers=headers_proxy, payload=data_proxy,stream=stream)
+    return chat_completion(model=model, headers=headers_proxy, payload=data_proxy, stream=stream, session_id=session_id)
 
 
 def parse_response(response_text):
@@ -777,7 +835,7 @@ def parse_response(response_text):
     
     return response_data
 
-def chat_completion(model, headers, payload, stream=True):
+def chat_completion(model, headers, payload, stream=True, session_id=None):
     """处理用户请求并保留上下文"""
     try:
         url = f'{base_url}/v1/chat/completion/proxy'
@@ -796,8 +854,11 @@ def chat_completion(model, headers, payload, stream=True):
             
         # 根据stream参数决定返回方式
         if stream:
-            # 返回原始响应对象以便流式处理
-            return response
+            # 对于流式响应，我们需要创建一个包装器来捕获响应内容
+            if session_id:
+                return StreamingResponseWithSession(response, session_id, model)
+            else:
+                return response
         else:
             # 收集所有流数据并解析
             full_response = ""
@@ -809,7 +870,14 @@ def chat_completion(model, headers, payload, stream=True):
             
             if debug:
                 print("Full response collected")
-            return parse_response(full_response)
+            
+            result = parse_response(full_response)
+            
+            # 保存助手响应到会话
+            if session_id and isinstance(result, dict):
+                save_assistant_response(session_id, result)
+            
+            return result
     except requests.exceptions.RequestException as e:
         record_call(model, False)
         print(f"请求失败: {e}")
@@ -820,6 +888,66 @@ def chat_completion(model, headers, payload, stream=True):
         return "解析响应内容失败。"
     record_call(model, False)
     return {}
+
+
+def save_assistant_response(session_id: str, response_data: Dict) -> None:
+    """保存助手响应到会话"""
+    global SESSION_STORAGE
+    
+    if session_id in SESSION_STORAGE:
+        # 提取助手消息
+        if "choices" in response_data and response_data["choices"]:
+            choice = response_data["choices"][0]
+            if "message" in choice:
+                assistant_message = choice["message"]
+                SESSION_STORAGE[session_id]["messages"].append(assistant_message)
+                if debug:
+                    print(f"保存助手响应到会话 {session_id}")
+
+
+class StreamingResponseWithSession:
+    """包装流式响应以支持会话上下文保存"""
+    
+    def __init__(self, response, session_id, model):
+        self.response = response
+        self.session_id = session_id
+        self.model = model
+        self.accumulated_content = ""
+    
+    def iter_lines(self):
+        for chunk in self.response.iter_lines():
+            if chunk:
+                decoded_chunk = chunk.decode('utf-8')
+                if decoded_chunk.startswith("data:"):
+                    # 累积内容用于会话保存
+                    data_str = decoded_chunk[len("data:"):].strip()
+                    if data_str and data_str != "[DONE]":
+                        try:
+                            data = json.loads(data_str)
+                            if isinstance(data, dict) and "choices" in data:
+                                for choice in data["choices"]:
+                                    if "delta" in choice and "content" in choice["delta"]:
+                                        self.accumulated_content += choice["delta"]["content"]
+                        except json.JSONDecodeError:
+                            pass
+                yield chunk
+    
+    def __enter__(self):
+        return self
+    
+    def __exit__(self, *args):
+        # 会话结束时保存助手响应
+        if self.accumulated_content:
+            assistant_message = {
+                "role": "assistant",
+                "content": self.accumulated_content
+            }
+            global SESSION_STORAGE
+            if self.session_id in SESSION_STORAGE:
+                SESSION_STORAGE[self.session_id]["messages"].append(assistant_message)
+                if debug:
+                    print(f"流式响应保存到会话 {self.session_id}")
+        self.response.close()
 
 
 if __name__ == '__main__':
