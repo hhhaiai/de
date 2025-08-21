@@ -102,6 +102,33 @@ class APIServer:
             except Exception as e:
                 raise HTTPException(status_code=500, detail=str(e))
 
+        # Claude协议支持
+        @self.app.post("/api/v1/messages", name="claude_messages")
+        async def claude_messages(request: Request):
+            """Claude协议消息端点"""
+            try:
+                if debug:
+                    print("Claude protocol request received...")
+                headers = dict(request.headers)
+                data = await request.json()
+                if debug:
+                    print(f"Claude request data: {data}")
+                
+                # 转换Claude格式到OpenAI格式
+                openai_data = self._convert_claude_to_openai(data, headers)
+                
+                # 使用现有的OpenAI处理逻辑
+                response = self._generate_response(headers, openai_data)
+                
+                # 转换回Claude格式
+                claude_response = self._convert_openai_to_claude(response)
+                return JSONResponse(content=claude_response)
+                
+            except Exception as e:
+                if debug:
+                    print(f"Claude request processing error: {e}")
+                raise HTTPException(status_code=500, detail="Internal server error") from e
+
         # Register dynamic chat completion routes
         routes = self._get_routes()
         if debug:
@@ -171,6 +198,110 @@ class APIServer:
         numbers_str = ''.join(random.choices(string.digits, k=4))
         return f"session_{letters_str}{numbers_str}"
 
+    def _convert_claude_to_openai(self, claude_data: Dict, headers: Dict) -> Dict:
+        """Convert Claude format to OpenAI format"""
+        # Claude格式示例:
+        # {
+        #   "model": "claude-3-sonnet-20240229",
+        #   "messages": [{"role": "user", "content": "Hello"}],
+        #   "max_tokens": 1024,
+        #   "stream": false
+        # }
+        
+        openai_data = {
+            "model": claude_data.get("model", "gpt-4o-mini"),
+            "messages": claude_data.get("messages", []),
+            "stream": claude_data.get("stream", False)
+        }
+        
+        # 处理session_id和user_id
+        session_id = claude_data.get("session_id")
+        user_id = claude_data.get("user_id")
+        if session_id:
+            openai_data["session_id"] = session_id
+        if user_id:
+            openai_data["user_id"] = user_id
+        
+        # 处理max_tokens
+        max_tokens = claude_data.get("max_tokens")
+        if max_tokens:
+            openai_data["max_tokens"] = max_tokens
+            
+        return openai_data
+
+    def _convert_openai_to_claude(self, openai_response: Dict) -> Dict:
+        """Convert OpenAI format to Claude format"""
+        # OpenAI格式:
+        # {
+        #   "id": "chatcmpl-123",
+        #   "object": "chat.completion",
+        #   "created": 1677652288,
+        #   "model": "gpt-4o-mini",
+        #   "choices": [{
+        #     "index": 0,
+        #     "message": {
+        #       "role": "assistant",
+        #       "content": "Hello! How can I help you?"
+        #     },
+        #     "finish_reason": "stop"
+        #   }],
+        #   "usage": {"prompt_tokens": 9, "completion_tokens": 12, "total_tokens": 21}
+        # }
+        
+        # Claude格式:
+        # {
+        #   "id": "msg_123",
+        #   "type": "message",
+        #   "role": "assistant",
+        #   "content": [{"type": "text", "text": "Hello! How can I help you?"}],
+        #   "model": "claude-3-sonnet-20240229",
+        #   "stop_reason": "end_turn",
+        #   "stop_sequence": null,
+        #   "usage": {"input_tokens": 9, "output_tokens": 12}
+        # }
+        
+        if not isinstance(openai_response, dict):
+            return {
+                "id": f"msg_{int(time.time() * 1000)}",
+                "type": "message",
+                "role": "assistant",
+                "content": [{"type": "text", "text": str(openai_response)}],
+                "model": "claude-3-sonnet-20240229",
+                "stop_reason": "end_turn",
+                "usage": {"input_tokens": 0, "output_tokens": 0}
+            }
+        
+        # 提取消息内容
+        content = ""
+        if "choices" in openai_response and openai_response["choices"]:
+            choice = openai_response["choices"][0]
+            if "message" in choice and "content" in choice["message"]:
+                content = choice["message"]["content"]
+        
+        # 提取使用情况
+        input_tokens = 0
+        output_tokens = 0
+        if "usage" in openai_response:
+            input_tokens = openai_response["usage"].get("prompt_tokens", 0)
+            output_tokens = openai_response["usage"].get("completion_tokens", 0)
+        
+        # 构建Claude响应
+        claude_response = {
+            "id": openai_response.get("id", f"msg_{int(time.time() * 1000)}"),
+            "type": "message",
+            "role": "assistant",
+            "content": [{"type": "text", "text": content}],
+            "model": openai_response.get("model", "claude-3-sonnet-20240229"),
+            "stop_reason": "end_turn",
+            "stop_sequence": None,
+            "usage": {
+                "input_tokens": input_tokens,
+                "output_tokens": output_tokens
+            }
+        }
+        
+        return claude_response
+
     def is_chatgpt_format(self, data):
         """Check if the data is in the expected ChatGPT format"""
         try:
@@ -221,11 +352,8 @@ class APIServer:
             # just auto will check
             if "auto" == model:
                 model = dg.get_auto_model()
-            # else:
-            #     if not dg.is_model_available(model):
-            #         raise HTTPException(status_code=400, detail="Invalid Model")
-            # ## kuan
-            # model = dg.get_model_by_autoupdate(model)
+            else:
+                model = dg.get_model_by_autoupdate(model)
             # must has token ? token check
             authorization = headers.get('Authorization')
             token = os.getenv("TOKEN", "")
@@ -405,7 +533,7 @@ class APIServer:
     def _reload_routes(self, new_routes: List[str]) -> None:
         """Reload only dynamic routes while preserving static ones"""
         # Define static route names
-        static_routes = {"root", "web", "health", "models", "apimodels"}
+        static_routes = {"root", "web", "health", "models", "apimodels", "clear_session", "claude_messages"}
 
         # Remove only dynamic routes
         self.app.routes[:] = [

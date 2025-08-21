@@ -698,8 +698,8 @@ def chat_completion_messages(
     # 确保model有效
     if not model or model == "auto":
         model = get_auto_model()
-    # else:
-    #     model = get_model_by_autoupdate(model)
+    else:
+        model = get_model_by_autoupdate(model)
     if debug:
         print(f"校准后的model: {model}")
     

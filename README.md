@@ -147,3 +147,60 @@ curl -X POST http://localhost:7860/api/v1/session/clear \
 - `session_id`: 可选，自定义会话标识符，用于维持对话上下文
 - 如果都不提供：系统自动生成临时会话ID，实现单次对话隔离
 - 如果同时提供：优先使用 `session_id`
+
+## Claude协议支持
+
+### Claude协议端点
+```bash
+# Claude协议消息端点
+curl -X POST http://localhost:7860/api/v1/messages \
+  -H "Content-Type: application/json" \
+  -H "x-api-key: YOUR_API_KEY" \
+  -d '{
+    "model": "claude-3-sonnet-20240229",
+    "messages": [{"role": "user", "content": "你好，Claude！"}],
+    "max_tokens": 1024,
+    "stream": false
+  }'
+```
+
+### Claude协议 + 上下文支持
+```bash
+# 使用session_id维持对话上下文
+curl -X POST http://localhost:7860/api/v1/messages \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "claude-3-sonnet-20240229",
+    "messages": [{"role": "user", "content": "我们来讨论机器学习"}],
+    "session_id": "ml_discussion",
+    "max_tokens": 1024
+  }'
+
+# 继续对话
+curl -X POST http://localhost:7860/api/v1/messages \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "claude-3-sonnet-20240229",
+    "messages": [{"role": "user", "content": "刚才我们讨论的是什么？"}],
+    "session_id": "ml_discussion",
+    "max_tokens": 1024
+  }'
+```
+
+### Claude协议参数说明：
+- `model`: 模型名称（支持所有可用模型）
+- `messages`: 消息数组，格式与OpenAI兼容
+- `max_tokens`: 最大生成token数
+- `stream`: 是否使用流式响应
+- `session_id`: 会话标识符，用于维持对话上下文
+- `user_id`: 用户标识符，自动转换为会话ID
+
+### 支持的Claude模型名称：
+- `claude-3-opus-20240229`
+- `claude-3-sonnet-20240229` 
+- `claude-3-haiku-20240307`
+- `claude-2.1`
+- `claude-2.0`
+- `claude-instant-1.2`
+
+注意：实际使用后端支持的模型，模型名称主要用于协议兼容性。
