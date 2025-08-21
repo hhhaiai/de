@@ -10,7 +10,7 @@ import tiktoken
 import uvicorn
 from apscheduler.schedulers.background import BackgroundScheduler
 from fastapi import FastAPI, Request, HTTPException
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, StreamingResponse
 from starlette.responses import HTMLResponse
 # 禁用 SSL 警告
 import urllib3
@@ -24,7 +24,7 @@ debug = False
 app = FastAPI(
     title="ones",
     description="High-performance API service",
-    version="1.2.2|2025.6.30"
+    version="1.2.3|2025.08.21"
 )
 
 
@@ -217,62 +217,91 @@ class APIServer:
             if not msgs:
                 raise HTTPException(status_code=400, detail="消息不能为空")
 
+            # 检查是否需要流式响应
+            stream = data.get("stream", False)
+            
             if debug:
                 print(f"request model: {model}")
                 if token:
                     print(f"request token: {token}")
                 print(f"request messages: {msgs}")
+                print(f"stream: {stream}")
 
-            result = dg.chat_completion_messages(
-                messages=msgs,
-                model=model,
-                stream=False
-            )
-            if debug:
-                print(f"result: {result}---- {self.is_chatgpt_format(result)}")
-
-            # If the request body data already matches ChatGPT format, return it directly
-            if self.is_chatgpt_format(result):
-                # If data already follows ChatGPT format, use it directly
-                response_data = self.process_result(result, model)
+            if stream:
+                # 流式响应处理
+                response = dg.chat_completion_messages(
+                    messages=msgs,
+                    model=model,
+                    stream=True
+                )
+                
+                # 返回流式响应
+                return StreamingResponse(
+                    self._stream_response(response),
+                    media_type="text/event-stream"
+                )
             else:
-                # Calculate the current timestamp
-                current_timestamp = int(time.time() * 1000)
-                # Otherwise, calculate the tokens and return a structured response
-                prompt_tokens = self._calculate_tokens(str(data))
-                completion_tokens = self._calculate_tokens(result)
-                total_tokens = prompt_tokens + completion_tokens
+                # 非流式响应处理
+                result = dg.chat_completion_messages(
+                    messages=msgs,
+                    model=model,
+                    stream=False
+                )
+                if debug:
+                    print(f"result: {result}---- {self.is_chatgpt_format(result)}")
 
-                response_data = {
-                    "id": self._generate_id(),
-                    "object": "chat.completion",
-                    "created": current_timestamp,
-                    "model": data.get("model", "gpt-4o"),
-                    "usage": {
-                        "prompt_tokens": prompt_tokens,
-                        "completion_tokens": completion_tokens,
-                        "total_tokens": total_tokens
-                    },
-                    "choices": [{
-                        "message": {
-                            "role": "assistant",
-                            "content": result
+                # If the request body data already matches ChatGPT format, return it directly
+                if self.is_chatgpt_format(result):
+                    # If data already follows ChatGPT format, use it directly
+                    response_data = self.process_result(result, model)
+                else:
+                    # Calculate the current timestamp
+                    current_timestamp = int(time.time() * 1000)
+                    # Otherwise, calculate the tokens and return a structured response
+                    prompt_tokens = self._calculate_tokens(str(data))
+                    completion_tokens = self._calculate_tokens(result)
+                    total_tokens = prompt_tokens + completion_tokens
+
+                    response_data = {
+                        "id": self._generate_id(),
+                        "object": "chat.completion",
+                        "created": current_timestamp,
+                        "model": data.get("model", "gpt-4o"),
+                        "usage": {
+                            "prompt_tokens": prompt_tokens,
+                            "completion_tokens": completion_tokens,
+                            "total_tokens": total_tokens
                         },
-                        "finish_reason": "stop",
-                        "index": 0
-                    }]
-                }
+                        "choices": [{
+                            "message": {
+                                "role": "assistant",
+                                "content": result
+                            },
+                            "finish_reason": "stop",
+                            "index": 0
+                        }]
+                    }
 
-            # Print the response for debugging (you may remove this in production)
-            if debug:
-                print(f"Response Data: {response_data}")
+                # Print the response for debugging (you may remove this in production)
+                if debug:
+                    print(f"Response Data: {response_data}")
 
-            return response_data
+                return response_data
         except Exception as e:
             dg.record_call(model,False)
             if debug:
                 print(f"Response generation error: {e}")
             raise HTTPException(status_code=500, detail=str(e)) from e
+
+    async def _stream_response(self, response):
+        """流式传输响应数据"""
+        try:
+            # 直接转发来自后端API的SSE流
+            for chunk in response.iter_lines():
+                if chunk:
+                    yield chunk.decode('utf-8') + "\n"
+        except Exception as e:
+            yield f"data: {{\"error\": \"Stream error: {str(e)}\"}}\n\n"
 
     def _get_workers_count(self) -> int:
         """Calculate optimal worker count"""
