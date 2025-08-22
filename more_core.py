@@ -24,7 +24,7 @@ debug = os.getenv("DEBUG", "False").lower() in ("true", "1", "t")
 app = FastAPI(
     title="ones",
     description="High-performance API service",
-    version="1.2.3|2025.08.21"
+    version="1.2.4|2025.08.22"
 )
 
 

@@ -20,12 +20,13 @@ curl 'https://www.degpt.ai/api/v1/auths/printSignIn' \
   -H 'user-agent: Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/137.0.0.0 Safari/537.36' \
   --data-raw '{"id":"a831158117fd7a6fbb7da40cce1e27e9","channel":""}'
 
+
 curl 'https://www.degpt.ai/api/v1/chat/completion/proxy' \
   -H 'accept: */*' \
   -H 'accept-language: en-US,en;q=0.9,zh-CN;q=0.8,zh;q=0.7' \
-  -H 'authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6ImE2ZmZhMjMxMGY3NzQ5MDBhZWM0OWZhOWQxZTllNzBjIiwiZXhwIjoxNzU2NDQ4MzczfQ.4ZJ3_rFGMlCUDiPF2ocyIzazkG4BJALUowOm_isp83E' \
+  -H 'authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6IjB4M2UxZTFlN0I2ODgzZkZGZDE0YzMwOTcwZjhFMGI0OUQ3RmZEODYyRCIsImV4cCI6MTc1NjQ1OTQyNn0.xi85JC8euev_tL0ETdkL617ZBj9RPmmODcZ-f--lmuQ' \
   -H 'content-type: application/json' \
-  -b '_ga=GA1.1.761121180.1732095521; _ga_ELT9ER83T2=GS2.1.s1755843574$o114$g0$t1755843574$j60$l0$h0' \
+  -b '_ga=GA1.1.761121180.1732095521; _ga_ELT9ER83T2=GS2.1.s1755854544$o115$g1$t1755855122$j60$l0$h0' \
   -H 'dnt: 1' \
   -H 'origin: https://www.degpt.ai' \
   -H 'priority: u=1, i' \
@@ -37,7 +38,7 @@ curl 'https://www.degpt.ai/api/v1/chat/completion/proxy' \
   -H 'sec-fetch-mode: cors' \
   -H 'sec-fetch-site: same-origin' \
   -H 'user-agent: Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/139.0.0.0 Safari/537.36' \
-  --data-raw '{"model":"qwen3-235b-a22b","messages":[{"role":"user","content":"你说隔壁是什么房子"}],"enable_thinking":true,"project":"DecentralGPT","stream":true}'
+  --data-raw '{"model":"qwen3-235b-a22b","messages":[{"role":"user","content":"hello"}],"enable_thinking":true,"project":"DecentralGPT","stream":true}'
 
 """
 import json
@@ -76,20 +77,18 @@ SESSION_STORAGE = {}
 if SESSION_STORAGE_TYPE == "memory":
     if debug:
         print("使用内存存储会话")
-elif SESSION_STORAGE_TYPE == "redis":
-    if debug:
-        print("使用 Redis 存储会话")
+
 
 '''用于存储缓存的模型数据'''
 cached_models = {
     "object": "list",
     "data": [],
-    "version": "1.2.3",
+    "version": "1.2.4",
     "provider": "DeGPT",
     "name": "DeGPT",
     "default_locale": "en-US",
     "status": True,
-    "time": 20250821
+    "time": 20250822
 }
 
 
