@@ -72,7 +72,7 @@ curl http://localhost:7860/api/v1/messages \
   -H "x-api-key: ANTHROPIC_API_KEY" \
   -H "anthropic-version: 2023-06-01" \
   -d '{
-    "model": "claude-sonnet-4-20250514",
+    "model": "claude-opus-4-20250514",
     "max_tokens": 1000,
     "messages": [
       {

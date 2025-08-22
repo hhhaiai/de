@@ -92,13 +92,43 @@ class APIServer:
         async def claude_messages(request: Request):
             """Claude协议消息端点"""
             try:
-                if debug:
-                    print("Claude protocol request received...")
+                # print("---"*20)
+                # print("--- 捕获到 Beta 请求 (/api/v1/messages?beta=true) ---")
+                # # --- 新增调试逻辑：检查 beta=true 查询参数 ---
+                # from urllib.parse import parse_qs
+                # # 获取查询参数字符串 (e.g., "beta=true&other=value")
+                # query_string = request.url.query
+                # # 解析查询参数
+                # query_params = parse_qs(query_string)
+                # # 检查 beta 参数是否存在且其第一个值为 'true' (忽略大小写)
+                # is_beta_request = 'beta' in query_params and query_params['beta'][0].lower() == 'true'
+
+                # if is_beta_request:
+                #     # 1. 获取并打印请求头 (Headers)
+                #     headers = dict(request.headers)
+                #     print("请求 Headers:")
+                #     for key, value in headers.items():
+                #         # 注意：Authorization 头部可能包含敏感信息，打印时请注意
+                #         print(f"  {key}: {value}")
+                #     # 2. 获取并打印请求体 (Body)
+                #     # 注意：await request.body() 只能调用一次
+                #     raw_body_bytes = await request.body()
+                #     try:
+                #         # 尝试将 body 解析为 JSON
+                #         body_data = json.loads(raw_body_bytes.decode('utf-8'))
+                #         print("请求 Body (JSON):")
+                #         print(json.dumps(body_data, indent=2, ensure_ascii=False)) # 格式化打印
+                #     except json.JSONDecodeError:
+                #         # 如果不是 JSON，就打印原始字符串
+                #         raw_body_str = raw_body_bytes.decode('utf-8')
+                #         print("请求 Body (Raw):")
+                #         print(raw_body_str)
+
+                #     print("--- Beta 请求信息打印完毕 ---")
+                #     print("==="*20)
+
                 headers = dict(request.headers)
                 data = await request.json()
-                if debug:
-                    print(f"Claude request data: {data}")
-                
                 # 检查流式请求
                 stream = data.get("stream", False)
                 
