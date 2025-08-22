@@ -36,6 +36,19 @@ $ docker run -p 7860:7860 -m 2g -e DEBUG=false de
 call demo《openai》
 
 ``` bash
+curl https://sanbo1200-d.hf.space/api/v1/models
+
+
+curl -X POST https://sanbo1200-d.hf.space/api/v1/chat/completions \
+  -H 'Accept: application/json' \
+  -H 'Authorization: Bearer YOUR_API_KEY' \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "auto",
+    "messages": [{"role": "user", "content": "你是什么模型?"}],
+    "stream":true
+  }'
+
 
 curl http://localhost:7860/v1/models
 curl http://localhost:7860/api/v1/models
