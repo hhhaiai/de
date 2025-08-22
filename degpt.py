@@ -23,24 +23,25 @@ curl 'https://www.degpt.ai/api/v1/auths/printSignIn' \
 curl 'https://www.degpt.ai/api/v1/chat/completion/proxy' \
   -H 'accept: */*' \
   -H 'accept-language: en-US,en;q=0.9,zh-CN;q=0.8,zh;q=0.7' \
-  -H 'authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6IjRiOWEzMTc5YzJkMDZkYzZhNThmNTJlOGY5NTk0NDk4IiwiZXhwIjoxNzUxODg3NTUxfQ.MyxL_rTULm8OFbW4-YA468Ih0pocqyQzhfjw9Hovx-8' \
+  -H 'authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6ImE2ZmZhMjMxMGY3NzQ5MDBhZWM0OWZhOWQxZTllNzBjIiwiZXhwIjoxNzU2NDQ4MzczfQ.4ZJ3_rFGMlCUDiPF2ocyIzazkG4BJALUowOm_isp83E' \
   -H 'content-type: application/json' \
-  -b '_ga=GA1.1.761121180.1732095521; _ga_ELT9ER83T2=GS2.1.s1751282755$o102$g1$t1751282770$j45$l0$h0' \
+  -b '_ga=GA1.1.761121180.1732095521; _ga_ELT9ER83T2=GS2.1.s1755843574$o114$g0$t1755843574$j60$l0$h0' \
   -H 'dnt: 1' \
   -H 'origin: https://www.degpt.ai' \
   -H 'priority: u=1, i' \
-  -H 'referer: https://www.degpt.ai/c/a42b3e39-b0c8-467c-819b-ff5415dd786f' \
-  -H 'sec-ch-ua: "Google Chrome";v="137", "Chromium";v="137", "Not/A)Brand";v="24"' \
+  -H 'referer: https://www.degpt.ai/' \
+  -H 'sec-ch-ua: "Not;A=Brand";v="99", "Google Chrome";v="139", "Chromium";v="139"' \
   -H 'sec-ch-ua-mobile: ?0' \
   -H 'sec-ch-ua-platform: "macOS"' \
   -H 'sec-fetch-dest: empty' \
   -H 'sec-fetch-mode: cors' \
   -H 'sec-fetch-site: same-origin' \
-  -H 'user-agent: Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/137.0.0.0 Safari/537.36' \
-  --data-raw '{"model":"gpt-4o-mini","messages":[{"role":"user","content":"你是什么模型"},{"role":"user","content":"hi"}],"enable_thinking":false,"project":"DecentralGPT","stream":true}'
+  -H 'user-agent: Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/139.0.0.0 Safari/537.36' \
+  --data-raw '{"model":"qwen3-235b-a22b","messages":[{"role":"user","content":"你说隔壁是什么房子"}],"enable_thinking":true,"project":"DecentralGPT","stream":true}'
 
 """
 import json
+import os
 import re
 import time
 from datetime import datetime, timedelta
@@ -52,17 +53,32 @@ import requests
 # 禁用 SSL 警告
 import urllib3
 from urllib3.exceptions import InsecureRequestWarning
+
+
 urllib3.disable_warnings(InsecureRequestWarning)
 urllib3.disable_warnings()
 
-debug = True
+debug = os.getenv("DEBUG", "False").lower() in ("true", "1", "t")
+
 # 全局变量
 last_request_time = 0  # 上次请求的时间戳
-cache_duration = 14400  # 缓存有效期，单位：秒 (4小时)
+cache_duration = int(os.getenv("CACHE_DURATION", "3600"))  # 缓存有效期，单位：秒 (1小时)
 
-# 会话管理 - 存储对话上下文
+# 会话存储配置
+SESSION_TIMEOUT = int(os.getenv("SESSION_TIMEOUT", "1800"))  # 会话超时时间30分钟
+SESSION_STORAGE_TYPE = os.getenv("SESSION_STORAGE_TYPE", "memory")  # 存储类型: memory 或 redis
+
+
+# 初始化会话存储
+SESSION_STORAGE_TYPE = "memory"
 SESSION_STORAGE = {}
-SESSION_TIMEOUT = 1800  # 会话超时时间30分钟
+
+if SESSION_STORAGE_TYPE == "memory":
+    if debug:
+        print("使用内存存储会话")
+elif SESSION_STORAGE_TYPE == "redis":
+    if debug:
+        print("使用 Redis 存储会话")
 
 '''用于存储缓存的模型数据'''
 cached_models = {
@@ -78,10 +94,15 @@ cached_models = {
 
 
 '''基础域名'''
-base_url = 'https://www.degpt.ai/api'
+base_url = os.getenv("DEGPT_BASE_URL", 'https://www.degpt.ai/api')
 
 '''基础模型'''
-base_model = "gpt-4o-mini"
+base_model = os.getenv("DEGPT_BASE_MODEL", "gpt-4o-mini")
+
+# 认证配置
+auth_id = os.getenv("DEGPT_AUTH_ID", "b39fdee47a6bdbab5bc6827ac954c422")
+auth_cookie = os.getenv("DEGPT_AUTH_COOKIE", "_ga=GA1.1.486456891.1750229584; _ga_ELT9ER83T2=GS2.1.s1750229583$o1$g1$t1750229594$j49$l0$h0")
+
 # 全局变量：存储所有模型的统计信息
 # 格式：{model_name: {"calls": 调用次数, "fails": 失败次数, "last_fail": 最后失败时间}}
 MODEL_STATS: Dict[str, Dict] = {}
@@ -112,15 +133,17 @@ def get_session(session_id: str) -> List[Dict]:
     # 清理过期会话
     cleanup_sessions()
     
-    if session_id not in SESSION_STORAGE:
-        SESSION_STORAGE[session_id] = {
-            "messages": [],
-            "last_activity": datetime.now()
-        }
-    else:
-        SESSION_STORAGE[session_id]["last_activity"] = datetime.now()
-    
-    return SESSION_STORAGE[session_id]["messages"]
+    if SESSION_STORAGE_TYPE == "memory":
+        if session_id not in SESSION_STORAGE:
+            SESSION_STORAGE[session_id] = {
+                "messages": [],
+                "last_activity": datetime.now()
+            }
+        else:
+            SESSION_STORAGE[session_id]["last_activity"] = datetime.now()
+        
+        return SESSION_STORAGE[session_id]["messages"]
+
 
 
 def cleanup_sessions() -> None:
@@ -128,24 +151,30 @@ def cleanup_sessions() -> None:
     global SESSION_STORAGE
     now = datetime.now()
     
-    expired_sessions = []
-    for session_id, session_data in SESSION_STORAGE.items():
-        if (now - session_data["last_activity"]).total_seconds() > SESSION_TIMEOUT:
-            expired_sessions.append(session_id)
+    if SESSION_STORAGE_TYPE == "memory":
+        expired_sessions = []
+        for session_id, session_data in SESSION_STORAGE.items():
+            if (now - session_data["last_activity"]).total_seconds() > SESSION_TIMEOUT:
+                expired_sessions.append(session_id)
+        
+        for session_id in expired_sessions:
+            del SESSION_STORAGE[session_id]
+            if debug:
+                print(f"清理过期会话: {session_id}")
     
-    for session_id in expired_sessions:
-        del SESSION_STORAGE[session_id]
-        if debug:
-            print(f"清理过期会话: {session_id}")
+    elif SESSION_STORAGE_TYPE == "redis":
+        # Redis 会自动过期，这里不需要手动清理
+        pass
 
 
 def clear_session(session_id: str) -> None:
     """清除特定会话"""
     global SESSION_STORAGE
-    if session_id in SESSION_STORAGE:
-        del SESSION_STORAGE[session_id]
-        if debug:
-            print(f"清除会话: {session_id}")
+    if SESSION_STORAGE_TYPE == "memory":
+        if session_id in SESSION_STORAGE:
+            del SESSION_STORAGE[session_id]
+            if debug:
+                print(f"清除会话: {session_id}")
 
 
 def get_auto_model(cooldown_seconds: int = 300) -> str:
@@ -201,14 +230,25 @@ def reload_check():
 def _fetch_and_update_models():
     """Thread-safe model fetching and cache updating"""
     global cached_models
+    success = False
+    
     try:
         get_from_js_v3()
+        success = True
     except Exception as e:
-        print(f"{e}")
+        if debug:
+            print(f"从JS获取模型数据失败: {e}")
+    
     try:
         get_alive_models()
+        success = True
     except Exception as e:
-        print(f"{e}")
+        if debug:
+            print(f"从API获取模型数据失败: {e}")
+    
+    # 如果两个方法都失败了，抛出异常
+    if not success:
+        raise Exception("无法获取模型数据")
 
 
 def get_models():
@@ -221,7 +261,11 @@ def get_models():
             last_request_time = current_time
             _fetch_and_update_models()
         except Exception as e:
-            print(f"{e}")
+            if debug:
+                print(f"获取模型数据时出错: {e}")
+            # 如果获取模型数据失败，但缓存中有数据，继续使用缓存数据
+            if not cached_models["data"]:
+                raise e
 
      # 根据MODEL_STATS判断高成功率的模型并更新base_model
     if MODEL_STATS:
@@ -695,6 +739,21 @@ def chat_completion_messages(
         project="DecentralGPT",
         temperature=0.3, max_tokens=1024, top_p=0.5,
         frequency_penalty=0, presence_penalty=0):
+    # 输入验证
+    if not messages or not isinstance(messages, list):
+        raise ValueError("messages 参数必须是一个非空列表")
+    
+    # 验证每条消息的格式
+    for i, message in enumerate(messages):
+        if not isinstance(message, dict):
+            raise ValueError(f"消息 {i} 必须是一个字典")
+        if "role" not in message or "content" not in message:
+            raise ValueError(f"消息 {i} 必须包含 'role' 和 'content' 字段")
+        if message["role"] not in ["system", "user", "assistant"]:
+            raise ValueError(f"消息 {i} 的 'role' 必须是 'system', 'user' 或 'assistant' 之一")
+        if not isinstance(message["content"], str):
+            raise ValueError(f"消息 {i} 的 'content' 必须是字符串")
+    
     # 确保model有效
     if not model or model == "auto":
         model = get_auto_model()
@@ -715,14 +774,14 @@ def chat_completion_messages(
         combined_messages = messages
     
     # 获取token
-    url = 'https://www.degpt.ai/api/v1/auths/printSignIn'
+    url = f'{base_url}/v1/auths/printSignIn'
 
     headers = {
-        "user-agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/137.0.0.0 Safari/537.36"
+        "user-agent": os.getenv("DEGPT_USER_AGENT", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/137.0.0.0 Safari/537.36")
     }
 
     data = {
-        "id": "b39fdee47a6bdbab5bc6827ac954c422",
+        "id": auth_id,
         "channel": ""
     }
     res_page = requests.post(url=url, headers=headers, json=data, verify=False, timeout=5)
@@ -732,26 +791,26 @@ def chat_completion_messages(
         print(f"res_page: {res_page}\r\nres_page.text: {res_page.text}\r\ntoken:{token}")
 
     headers_proxy = {
-        "Host": "www.degpt.ai",
+        "Host": os.getenv("DEGPT_PROXY_HOST", "www.degpt.ai"),
         "Connection": "keep-alive",
-        "Content-Length": "1673",
+        "Content-Length": os.getenv("DEGPT_PROXY_CONTENT_LENGTH", "1673"),
         "Pragma": "no-cache",
         "Cache-Control": "no-cache",
-        "sec-ch-ua-platform": "\"Windows\"",
+        "sec-ch-ua-platform": os.getenv("DEGPT_PROXY_SEC_CH_UA_PLATFORM", "\"Windows\""),
         "Authorization": f"Bearer {token}",
-        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/137.0.0.0 Safari/537.36",
-        "sec-ch-ua": "\"Google Chrome\";v=\"137\", \"Chromium\";v=\"137\", \"Not/A)Brand\";v=\"24\"",
+        "User-Agent": os.getenv("DEGPT_PROXY_USER_AGENT", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/137.0.0.0 Safari/537.36"),
+        "sec-ch-ua": os.getenv("DEGPT_PROXY_SEC_CH_UA", "\"Google Chrome\";v=\"137\", \"Chromium\";v=\"137\", \"Not/A)Brand\";v=\"24\""),
         "Content-Type": "application/json",
-        "sec-ch-ua-mobile": "?0",
+        "sec-ch-ua-mobile": os.getenv("DEGPT_PROXY_SEC_CH_UA_MOBILE", "?0"),
         "Accept": "*/*",
-        "Origin": "https://www.degpt.ai",
+        "Origin": os.getenv("DEGPT_PROXY_ORIGIN", "https://www.degpt.ai"),
         "Sec-Fetch-Site": "same-origin",
         "Sec-Fetch-Mode": "cors",
         "Sec-Fetch-Dest": "empty",
-        "Referer": "https://www.degpt.ai/c/e850c81f-19ab-4ac1-92ec-ee02c21095c7",
+        "Referer": os.getenv("DEGPT_PROXY_REFERER", "https://www.degpt.ai/c/e850c81f-19ab-4ac1-92ec-ee02c21095c7"),
         "Accept-Encoding": "gzip, deflate, br, zstd",
-        "Accept-Language": "zh-CN,zh;q=0.9",
-        "Cookie": "_ga=GA1.1.486456891.1750229584; _ga_ELT9ER83T2=GS2.1.s1750229583$o1$g1$t1750229594$j49$l0$h0"
+        "Accept-Language": os.getenv("DEGPT_PROXY_ACCEPT_LANGUAGE", "zh-CN,zh;q=0.9"),
+        "Cookie": auth_cookie
     }
     # 后端服务只支持流式调用
     data_proxy = {
@@ -759,7 +818,7 @@ def chat_completion_messages(
         "messages": combined_messages,
         "stream": True,  # 始终使用流式调用后端
         "project": project,
-        "enable_thinking": False
+        "enable_thinking": True
     }
     if debug:
         print(json.dumps(headers, indent=4))
@@ -845,20 +904,23 @@ def chat_completion(model, headers, payload, stream=True, session_id=None):
         # 始终以流式方式调用后端
         response = requests.post(url=url, headers=headers, json=payload, verify=False, timeout=100, stream=True)
         response.encoding = 'utf-8'
-        response.raise_for_status()
         
+        # 检查响应状态码
         if response.status_code != 200:
             record_call(model, False)
-        else:
-            record_call(model, True)
+            error_msg = f"API 请求失败，状态码: {response.status_code}"
+            if response.text:
+                error_msg += f"，响应内容: {response.text}"
+            raise requests.exceptions.RequestException(error_msg)
+        
+        response.raise_for_status()
+        record_call(model, True)
             
         # 根据stream参数决定返回方式
         if stream:
-            # 对于流式响应，我们需要创建一个包装器来捕获响应内容
-            if session_id:
-                return StreamingResponseWithSession(response, session_id, model)
-            else:
-                return response
+            # 对于流式响应，直接返回response对象
+            # 会话上下文的保存将在more_core.py中处理
+            return response
         else:
             # 收集所有流数据并解析
             full_response = ""
@@ -878,32 +940,38 @@ def chat_completion(model, headers, payload, stream=True, session_id=None):
                 save_assistant_response(session_id, result)
             
             return result
+    except requests.exceptions.Timeout:
+        record_call(model, False)
+        raise requests.exceptions.RequestException("请求超时，请稍后重试")
+    except requests.exceptions.ConnectionError:
+        record_call(model, False)
+        raise requests.exceptions.RequestException("网络连接错误，请检查网络设置")
     except requests.exceptions.RequestException as e:
         record_call(model, False)
-        print(f"请求失败: {e}")
-        return "请求失败，请检查网络或参数配置。"
+        raise e
     except (KeyError, IndexError) as e:
         record_call(model, False)
-        print(f"解析响应时出错: {e}")
-        return "解析响应内容失败。"
-    record_call(model, False)
-    return {}
+        raise Exception(f"解析响应时出错: {e}")
+    except Exception as e:
+        record_call(model, False)
+        raise Exception(f"未知错误: {e}")
 
 
 def save_assistant_response(session_id: str, response_data: Dict) -> None:
     """保存助手响应到会话"""
     global SESSION_STORAGE
     
-    if session_id in SESSION_STORAGE:
-        # 提取助手消息
-        if "choices" in response_data and response_data["choices"]:
-            choice = response_data["choices"][0]
-            if "message" in choice:
-                assistant_message = choice["message"]
-                SESSION_STORAGE[session_id]["messages"].append(assistant_message)
-                if debug:
-                    print(f"保存助手响应到会话 {session_id}")
-
+    if SESSION_STORAGE_TYPE == "memory":
+        if session_id in SESSION_STORAGE:
+            # 提取助手消息
+            if "choices" in response_data and response_data["choices"]:
+                choice = response_data["choices"][0]
+                if "message" in choice:
+                    assistant_message = choice["message"]
+                    SESSION_STORAGE[session_id]["messages"].append(assistant_message)
+                    if debug:
+                        print(f"保存助手响应到会话 {session_id}")
+    
 
 class StreamingResponseWithSession:
     """包装流式响应以支持会话上下文保存"""
@@ -913,6 +981,20 @@ class StreamingResponseWithSession:
         self.session_id = session_id
         self.model = model
         self.accumulated_content = ""
+    
+    def __iter__(self):
+        return self
+    
+    def __next__(self):
+        # 这个方法不会被直接调用，但我们实现它以保持兼容性
+        raise StopIteration
+    
+    def __aiter__(self):
+        return self
+    
+    async def __anext__(self):
+        # 这个方法也不会被直接调用，但我们实现它以保持兼容性
+        raise StopAsyncIteration
     
     def iter_lines(self):
         for chunk in self.response.iter_lines():
@@ -943,10 +1025,11 @@ class StreamingResponseWithSession:
                 "content": self.accumulated_content
             }
             global SESSION_STORAGE
-            if self.session_id in SESSION_STORAGE:
-                SESSION_STORAGE[self.session_id]["messages"].append(assistant_message)
-                if debug:
-                    print(f"流式响应保存到会话 {self.session_id}")
+            if SESSION_STORAGE_TYPE == "memory":
+                if self.session_id in SESSION_STORAGE:
+                    SESSION_STORAGE[self.session_id]["messages"].append(assistant_message)
+                    if debug:
+                        print(f"流式响应保存到会话 {self.session_id}")
         self.response.close()
 
 
@@ -972,5 +1055,6 @@ if __name__ == '__main__':
 
     for model in models:
         result = chat_completion_message(user_prompt="你是什么模型？", model=model, stream=True)
-        print(f"模型 {model} 的响应：{result}")
+        print("="*60)
+        print(f"模型 {model} 的响应：{result.text}")
 
