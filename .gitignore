@@ -61,7 +61,7 @@ hs_err_pid*
 *.cfg
 # for nodejs
 node_modules/
-# for python 
+# for python
 package-lock.json
 .$*
 *.drawio.bkp
@@ -75,5 +75,4 @@ env
 .venv
 pip-log.txt
 dev.md
-
-
+claude-code-usage-bar/
