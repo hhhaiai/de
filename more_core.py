@@ -16,6 +16,8 @@ from starlette.responses import HTMLResponse
 import urllib3
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 import asyncio
+import sys
+
 import degpt as dg
 
 # debug for Log
@@ -46,7 +48,7 @@ class APIServer:
         # Scheduled Task 2: Reload models every 30 minutes (1800 seconds). This task will check and update the model data periodically
         self.scheduler.add_job(self._reload_check, 'interval', seconds=60 * 30)
         self.scheduler.start()
-        
+
     def _setup_routes(self) -> None:
         """Initialize API routes"""
         self.routes = """Initialize API routes"""
@@ -131,13 +133,13 @@ class APIServer:
                 data = await request.json()
                 # 检查流式请求
                 stream = data.get("stream", False)
-                
+
                 # 转换Claude格式到OpenAI格式
                 openai_data = self._convert_claude_to_openai(data, headers)
-                
+
                 # 使用现有的OpenAI处理逻辑
                 response = self._generate_response_optimized(headers, openai_data)
-                
+
                 if stream and isinstance(response, StreamingResponse):
                     # 流式响应 - 转换为Claude格式的SSE流
                     return StreamingResponse(
@@ -154,11 +156,11 @@ class APIServer:
                         response_data = json.loads(content.decode())
                     else:
                         response_data = response
-                    
+
                     # 转换回Claude格式
                     claude_response = self._convert_openai_to_claude(response_data)
                     return JSONResponse(content=claude_response)
-                
+
             except Exception as e:
                 if debug:
                     print(f"Claude request processing error: {e}")
@@ -248,35 +250,35 @@ class APIServer:
         #   "stop_sequences": ["\n\nHuman:"],
         #   "system": "You are a helpful assistant."
         # }
-        
+
         openai_data = {
             "model": claude_data.get("model", "gpt-4o-mini"),
             "messages": self._convert_claude_messages(claude_data.get("messages", [])),
             "stream": claude_data.get("stream", False)
         }
-        
+
         # 映射所有标准参数
         parameter_mapping = {
             "max_tokens": "max_tokens",
-            "temperature": "temperature", 
+            "temperature": "temperature",
             "top_p": "top_p",
             "stop_sequences": "stop",
             "top_k": "top_k",
             "frequency_penalty": "frequency_penalty",
             "presence_penalty": "presence_penalty"
         }
-        
+
         for claude_key, openai_key in parameter_mapping.items():
             if claude_key in claude_data:
                 openai_data[openai_key] = claude_data[claude_key]
-        
+
         # 处理system提示
         if "system" in claude_data:
             openai_data["messages"].insert(0, {
                 "role": "system",
                 "content": claude_data["system"]
             })
-        
+
         # 处理session_id和user_id
         session_id = claude_data.get("session_id")
         user_id = claude_data.get("user_id")
@@ -284,26 +286,26 @@ class APIServer:
             openai_data["session_id"] = session_id
         if user_id:
             openai_data["user_id"] = user_id
-        
+
         # 处理tools参数（如果存在）
         if "tools" in claude_data:
             openai_data["tools"] = claude_data["tools"]
         if "tool_choice" in claude_data:
             openai_data["tool_choice"] = claude_data["tool_choice"]
-            
+
         return openai_data
 
     def _convert_claude_messages(self, claude_messages: List[Dict]) -> List[Dict]:
         """Convert Claude message format to OpenAI format"""
         openai_messages = []
-        
+
         for message in claude_messages:
             if not isinstance(message, dict):
                 continue
-                
+
             role = message.get("role")
             content = message.get("content", [])
-            
+
             # 转换内容格式
             if isinstance(content, list):
                 # Claude格式: [{"type": "text", "text": "Hello"}]
@@ -321,31 +323,31 @@ class APIServer:
                     "role": role,
                     "content": str(content)
                 })
-                
+
         return openai_messages
 
     def _convert_openai_to_claude(self, openai_response: Dict) -> Dict:
         """Convert OpenAI format to Claude format with complete field mapping"""
         if not isinstance(openai_response, dict):
             return self._create_error_claude_response(str(openai_response))
-        
+
         try:
             # 提取消息内容
             content = ""
             thinking_content = None
             finish_reason = "stop"
-            
+
             if "choices" in openai_response and openai_response["choices"]:
                 choice = openai_response["choices"][0]
                 if "message" in choice:
                     message = choice["message"]
                     if "content" in message:
                         content = message.get("content", "")
-                    
+
                     # 提取thinking内容（如果存在）
                     if "thinking" in message:
                         thinking_content = message["thinking"]
-                
+
                 # 映射finish_reason到Claude的stop_reason
                 finish_reason_map = {
                     "stop": "end_turn",
@@ -354,17 +356,17 @@ class APIServer:
                     "content_filter": "content_filter"
                 }
                 finish_reason = finish_reason_map.get(
-                    choice.get("finish_reason", "stop"), 
+                    choice.get("finish_reason", "stop"),
                     "end_turn"
                 )
-            
+
             # 提取使用情况
             input_tokens = 0
             output_tokens = 0
             if "usage" in openai_response:
                 input_tokens = openai_response["usage"].get("prompt_tokens", 0)
                 output_tokens = openai_response["usage"].get("completion_tokens", 0)
-            
+
             # 构建完整的Claude响应
             claude_response = {
                 "id": openai_response.get("id", f"msg_{int(time.time() * 1000)}"),
@@ -379,11 +381,11 @@ class APIServer:
                     "output_tokens": output_tokens
                 }
             }
-            
+
             # 添加thinking内容（如果存在）
             if thinking_content:
                 claude_response["thinking"] = thinking_content
-            
+
             # 添加tool_use内容（如果存在）
             if "tool_calls" in openai_response.get("choices", [{}])[0].get("message", {}):
                 tool_calls = openai_response["choices"][0]["message"]["tool_calls"]
@@ -391,9 +393,9 @@ class APIServer:
                     claude_response["content"].extend(
                         self._convert_tool_calls_to_claude(tool_calls)
                     )
-            
+
             return claude_response
-            
+
         except Exception as e:
             return self._create_error_claude_response(f"Conversion error: {str(e)}")
 
@@ -414,22 +416,22 @@ class APIServer:
         """Convert OpenAI streaming response to Claude format"""
         if not isinstance(openai_data, dict):
             return None
-            
+
         claude_chunk = {
             "type": "content_block_delta",
             "index": 0,
             "delta": {"type": "text_delta", "text": ""}
         }
-        
+
         # 提取OpenAI流式数据中的内容
         if "choices" in openai_data and openai_data["choices"]:
             choice = openai_data["choices"][0]
             if "delta" in choice and "content" in choice["delta"]:
                 claude_chunk["delta"]["text"] = choice["delta"]["content"]
                 return claude_chunk
-        
+
         return None
-    
+
     def _create_error_claude_response(self, error_message: str) -> Dict:
         """Create error response in Claude format"""
         return {
@@ -497,7 +499,7 @@ class APIServer:
                 model_name = dg.get_auto_model()
             else:
                 model_name = dg.get_model_by_autoupdate(model_name)
-            
+
             model = model_name  # 设置最终的model变量
             # must has token ? token check
             authorization = headers.get('Authorization')
@@ -517,18 +519,18 @@ class APIServer:
             # 获取会话ID - 支持session_id和user_id参数
             session_id = data.get("session_id")
             user_id = data.get("user_id")
-            
+
             # 如果没有提供session_id，但提供了user_id，则使用user_id作为session_id
             if not session_id and user_id:
                 session_id = f"user_{user_id}"
-            
+
             # 如果都没有提供，生成一个临时的session_id用于单次对话
             if not session_id:
                 session_id = self._generate_session_id()
 
             # 检查是否需要流式响应
             stream = data.get("stream", False)
-            
+
             if debug:
                 print(f"request model: {model_name}")
                 if token:
@@ -546,7 +548,7 @@ class APIServer:
                     session_id=session_id,
                     stream=True
                 )
-                
+
                 # 直接返回流式响应，逐行转发给客户端
                 return StreamingResponse(
                     self._stream_response(response),
@@ -621,7 +623,7 @@ class APIServer:
                     dg.record_call(model, False)
             except:
                 pass  # 忽略记录错误
-            
+
             if debug:
                 print(f"Response generation error: {e}")
             # 提供更详细的错误信息
@@ -635,22 +637,6 @@ class APIServer:
             else:
                 raise HTTPException(status_code=500, detail=error_detail) from e
 
-    # async def _stream_response(self, response):
-    #     """流式传输响应数据"""
-    #     # 如果response是StreamingResponseWithSession对象，直接使用其iter_lines方法
-    #     if hasattr(response, 'iter_lines'):
-    #         for chunk in response.iter_lines():
-    #             yield chunk
-    #     else:
-    #         try:
-    #             # 直接转发来自后端API的SSE流
-    #             for chunk in response.iter_lines():
-    #                 if chunk:
-    #                     yield chunk.decode('utf-8') + "\n"
-    #         except Exception as e:
-    #             yield f"data: {{\"error\": \"Stream error: {str(e)}\"}}\n\n"
-    # 在 more_core.py 文件中找到这个方法并替换为以下代码
-
     async def _stream_response(self, response):
         """流式传输响应数据，确保每行正确格式化以便 SSE"""
         # 如果response是StreamingResponseWithSession对象，直接使用其iter_lines方法
@@ -658,7 +644,7 @@ class APIServer:
             # 使用 StreamingResponseWithSession 的 iter_lines 方法来累积内容并保存会话
             try:
                 # iter_lines() 内部处理了累积和会话保存
-                async for chunk in self._iter_lines_with_newline(response): 
+                async for chunk in self._iter_lines_with_newline(response):
                     yield chunk
             except Exception as e:
                 if debug:
@@ -751,13 +737,18 @@ class APIServer:
         workers = self._get_workers_count()
         if debug:
             print(f"Configuring server with {workers} workers")
+        # 检测平台，Windows不使用uvloop
+        if sys.platform == "win32":
+            loop_type = "asyncio" # <-- 关键修改：使用 "asyncio" 而不是 None
+        else:
+            loop_type = "uvloop"
 
         return uvicorn.Config(
             app=self.app,
             host=host,
             port=port,
             workers=workers,
-            loop="uvloop",
+            loop=loop_type,
             limit_concurrency=1000,
             timeout_keep_alive=30,
             access_log=True,
