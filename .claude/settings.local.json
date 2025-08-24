@@ -7,7 +7,7 @@
       "Bash(claude-monitor --view realtime)",
       "Bash(echo $PROFILE)",
       "Bash(.claude-status.bat)",
-      "Bash(cmd /c \"D:\\code\\de\\claude-status.bat\")",
+      "Bash(cmd /c \"\\docs\\claude-status.bat\")",
       "Bash(cmd:*)",
       "Bash(claude config:*)",
       "Bash(claude /doctor)",
@@ -16,6 +16,9 @@
       "Bash(python:*)"
     ],
     "deny": [],
-    "ask": []
+    "ask": [],
+    "additionalDirectories": [
+      "D:\\"
+    ]
   }
 }
