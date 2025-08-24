@@ -1,0 +1,21 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(claude-statusbar --help)",
+      "Bash(claude-monitor --help)",
+      "Bash(claude-statusbar)",
+      "Bash(claude-monitor --view realtime)",
+      "Bash(echo $PROFILE)",
+      "Bash(.claude-status.bat)",
+      "Bash(cmd /c \"D:\\code\\de\\claude-status.bat\")",
+      "Bash(cmd:*)",
+      "Bash(claude config:*)",
+      "Bash(claude /doctor)",
+      "Bash(claude doctor)",
+      "Bash(npm install -g @anthropic-ai/claude-code)",
+      "Bash(python:*)"
+    ],
+    "deny": [],
+    "ask": []
+  }
+}

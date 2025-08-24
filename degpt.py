@@ -40,6 +40,49 @@ curl 'https://www.degpt.ai/api/v1/chat/completion/proxy' \
   -H 'user-agent: Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/139.0.0.0 Safari/537.36' \
   --data-raw '{"model":"qwen3-235b-a22b","messages":[{"role":"user","content":"hello"}],"enable_thinking":true,"project":"DecentralGPT","stream":true}'
 
+
+############ 支持多模态接口
+
+curl 'https://www.degpt.ai/api/v1/chat/completion/proxy' \
+  -H 'accept: */*' \
+  -H 'accept-language: en-US,en;q=0.9,zh-CN;q=0.8,zh;q=0.7' \
+  -H 'authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6IjljZWE3YWVkZDBhN2I1NDE5YzVhYjFjNDlkZDJjMzdmIiwiZXhwIjoxNzU2NjQ2NDI4fQ.Ju3lXfFslDttAKUmCKHkoAz8V60JF3pnsNeZPA8W2Os' \
+  -H 'content-type: application/json' \
+  -b '_ga=GA1.1.1377380950.1756041630; _ga_ELT9ER83T2=GS2.1.s1756041629$o1$g0$t1756041629$j60$l0$h0' \
+  -H 'dnt: 1' \
+  -H 'origin: https://www.degpt.ai' \
+  -H 'priority: u=1, i' \
+  -H 'referer: https://www.degpt.ai/' \
+  -H 'sec-ch-ua: "Not)A;Brand";v="8", "Chromium";v="138", "Google Chrome";v="138"' \
+  -H 'sec-ch-ua-mobile: ?0' \
+  -H 'sec-ch-ua-platform: "Windows"' \
+  -H 'sec-fetch-dest: empty' \
+  -H 'sec-fetch-mode: cors' \
+  -H 'sec-fetch-site: same-origin' \
+  -H 'user-agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/138.0.0.0 Safari/537.36' \
+  --data-raw '{"model":"doubao-seed-1-6-250615","messages":[{"role":"user","content":[{"type":"text","text":"What does this picture mean?"},{"type":"image_url","image_url":{"url":"data:image/png;base64,"}}]}],"enable_thinking":false,"project":"DecentralGPT","stream":true}'
+
+curl 'https://www.degpt.ai/api/v1/chat/completion/proxy' \
+  -H 'accept: */*' \
+  -H 'accept-language: en-US,en;q=0.9,zh-CN;q=0.8,zh;q=0.7' \
+  -H 'authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6IjljZWE3YWVkZDBhN2I1NDE5YzVhYjFjNDlkZDJjMzdmIiwiZXhwIjoxNzU2NjQ2NDI4fQ.Ju3lXfFslDttAKUmCKHkoAz8V60JF3pnsNeZPA8W2Os' \
+  -H 'content-type: application/json' \
+  -b '_ga=GA1.1.1377380950.1756041630; _ga_ELT9ER83T2=GS2.1.s1756041629$o1$g0$t1756041629$j60$l0$h0' \
+  -H 'dnt: 1' \
+  -H 'origin: https://www.degpt.ai' \
+  -H 'priority: u=1, i' \
+  -H 'referer: https://www.degpt.ai/' \
+  -H 'sec-ch-ua: "Not)A;Brand";v="8", "Chromium";v="138", "Google Chrome";v="138"' \
+  -H 'sec-ch-ua-mobile: ?0' \
+  -H 'sec-ch-ua-platform: "Windows"' \
+  -H 'sec-fetch-dest: empty' \
+  -H 'sec-fetch-mode: cors' \
+  -H 'sec-fetch-site: same-origin' \
+  -H 'user-agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/138.0.0.0 Safari/537.36' \
+  --data-raw '{"model":"doubao-seed-1-6-250615","messages":[{"role":"user","content":[{"type":"text","text":"数学原理是什么呢?"}]}],"enable_thinking":false,"project":"DecentralGPT","stream":true}'
+
+
+
 """
 import json
 import os
@@ -128,10 +171,10 @@ def record_call(model_name: str, success: bool = True) -> None:
 def get_session(session_id: str) -> List[Dict]:
     """获取或创建会话上下文"""
     global SESSION_STORAGE
-    
+
     # 清理过期会话
     cleanup_sessions()
-    
+
     if SESSION_STORAGE_TYPE == "memory":
         if session_id not in SESSION_STORAGE:
             SESSION_STORAGE[session_id] = {
@@ -140,7 +183,7 @@ def get_session(session_id: str) -> List[Dict]:
             }
         else:
             SESSION_STORAGE[session_id]["last_activity"] = datetime.now()
-        
+
         return SESSION_STORAGE[session_id]["messages"]
 
 
@@ -149,18 +192,18 @@ def cleanup_sessions() -> None:
     """清理过期会话"""
     global SESSION_STORAGE
     now = datetime.now()
-    
+
     if SESSION_STORAGE_TYPE == "memory":
         expired_sessions = []
         for session_id, session_data in SESSION_STORAGE.items():
             if (now - session_data["last_activity"]).total_seconds() > SESSION_TIMEOUT:
                 expired_sessions.append(session_id)
-        
+
         for session_id in expired_sessions:
             del SESSION_STORAGE[session_id]
             if debug:
                 print(f"清理过期会话: {session_id}")
-    
+
     elif SESSION_STORAGE_TYPE == "redis":
         # Redis 会自动过期，这里不需要手动清理
         pass
@@ -230,21 +273,21 @@ def _fetch_and_update_models():
     """Thread-safe model fetching and cache updating"""
     global cached_models
     success = False
-    
+
     try:
         get_from_js_v3()
         success = True
     except Exception as e:
         if debug:
             print(f"从JS获取模型数据失败: {e}")
-    
+
     try:
         get_alive_models()
         success = True
     except Exception as e:
         if debug:
             print(f"从API获取模型数据失败: {e}")
-    
+
     # 如果两个方法都失败了，抛出异常
     if not success:
         raise Exception("无法获取模型数据")
@@ -741,7 +784,7 @@ def chat_completion_messages(
     # 输入验证
     if not messages or not isinstance(messages, list):
         raise ValueError("messages 参数必须是一个非空列表")
-    
+
     # 验证每条消息的格式
     for i, message in enumerate(messages):
         if not isinstance(message, dict):
@@ -752,7 +795,7 @@ def chat_completion_messages(
             raise ValueError(f"消息 {i} 的 'role' 必须是 'system', 'user' 或 'assistant' 之一")
         if not isinstance(message["content"], str):
             raise ValueError(f"消息 {i} 的 'content' 必须是字符串")
-    
+
     # 确保model有效
     if not model or model == "auto":
         model = get_auto_model()
@@ -760,7 +803,7 @@ def chat_completion_messages(
         model = get_model_by_autoupdate(model)
     if debug:
         print(f"校准后的model: {model}")
-    
+
     # 处理会话上下文
     if session_id:
         session_messages = get_session(session_id)
@@ -771,7 +814,7 @@ def chat_completion_messages(
             print(f"合并后的消息: {len(combined_messages)} 条")
     else:
         combined_messages = messages
-    
+
     # 获取token
     url = f'{base_url}/v1/auths/printSignIn'
 
@@ -835,7 +878,7 @@ def parse_response(response_text):
     result = ""
     created = None
     object_type = None
-    
+
     for line in lines:
         if line.startswith("data:"):
             data_str = line[len("data:"):].strip()
@@ -847,7 +890,7 @@ def parse_response(response_text):
                 if isinstance(data, dict) and not created:
                     created = data.get("created")
                     object_type = data.get("object")
-                
+
                 # 安全访问嵌套字段，确保是字典类型
                 if isinstance(data, dict):
                     # 检查是否存在choices字段且为列表
@@ -869,7 +912,7 @@ def parse_response(response_text):
     # 计算token数量
     enc = tiktoken.get_encoding("cl100k_base")
     completion_tokens = len(enc.encode(result))
-    
+
     # 组装标准响应数据
     response_data = {
         "id": f"chatcmpl-{datetime.now().timestamp()}",
@@ -890,7 +933,7 @@ def parse_response(response_text):
             "index": 0
         }]
     }
-    
+
     return response_data
 
 def chat_completion(model, headers, payload, stream=True, session_id=None):
@@ -899,11 +942,11 @@ def chat_completion(model, headers, payload, stream=True, session_id=None):
         url = f'{base_url}/v1/chat/completion/proxy'
         if debug:
             print(f"url: {url}")
-        
+
         # 始终以流式方式调用后端
         response = requests.post(url=url, headers=headers, json=payload, verify=False, timeout=100, stream=True)
         response.encoding = 'utf-8'
-        
+
         # 检查响应状态码
         if response.status_code != 200:
             record_call(model, False)
@@ -911,10 +954,10 @@ def chat_completion(model, headers, payload, stream=True, session_id=None):
             if response.text:
                 error_msg += f"，响应内容: {response.text}"
             raise requests.exceptions.RequestException(error_msg)
-        
+
         response.raise_for_status()
         record_call(model, True)
-            
+
         # 根据stream参数决定返回方式
         if stream:
             # 对于流式响应，直接返回response对象
@@ -928,16 +971,16 @@ def chat_completion(model, headers, payload, stream=True, session_id=None):
                     decoded_chunk = chunk.decode('utf-8')
                     if decoded_chunk.startswith("data:"):
                         full_response += decoded_chunk + "\n"
-            
+
             if debug:
                 print("Full response collected")
-            
+
             result = parse_response(full_response)
-            
+
             # 保存助手响应到会话
             if session_id and isinstance(result, dict):
                 save_assistant_response(session_id, result)
-            
+
             return result
     except requests.exceptions.Timeout:
         record_call(model, False)
@@ -959,7 +1002,7 @@ def chat_completion(model, headers, payload, stream=True, session_id=None):
 def save_assistant_response(session_id: str, response_data: Dict) -> None:
     """保存助手响应到会话"""
     global SESSION_STORAGE
-    
+
     if SESSION_STORAGE_TYPE == "memory":
         if session_id in SESSION_STORAGE:
             # 提取助手消息
@@ -970,31 +1013,31 @@ def save_assistant_response(session_id: str, response_data: Dict) -> None:
                     SESSION_STORAGE[session_id]["messages"].append(assistant_message)
                     if debug:
                         print(f"保存助手响应到会话 {session_id}")
-    
+
 
 class StreamingResponseWithSession:
     """包装流式响应以支持会话上下文保存"""
-    
+
     def __init__(self, response, session_id, model):
         self.response = response
         self.session_id = session_id
         self.model = model
         self.accumulated_content = ""
-    
+
     def __iter__(self):
         return self
-    
+
     def __next__(self):
         # 这个方法不会被直接调用，但我们实现它以保持兼容性
         raise StopIteration
-    
+
     def __aiter__(self):
         return self
-    
+
     async def __anext__(self):
         # 这个方法也不会被直接调用，但我们实现它以保持兼容性
         raise StopAsyncIteration
-    
+
     def iter_lines(self):
         for chunk in self.response.iter_lines():
             if chunk:
@@ -1012,10 +1055,10 @@ class StreamingResponseWithSession:
                         except json.JSONDecodeError:
                             pass
                 yield chunk
-    
+
     def __enter__(self):
         return self
-    
+
     def __exit__(self, *args):
         # 会话结束时保存助手响应
         if self.accumulated_content:
@@ -1056,4 +1099,3 @@ if __name__ == '__main__':
         result = chat_completion_message(user_prompt="你是什么模型？", model=model, stream=True)
         print("="*60)
         print(f"模型 {model} 的响应：{result.text}")
-
