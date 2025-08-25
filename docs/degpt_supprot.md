@@ -4,7 +4,7 @@ https://www.degpt.ai
 
 ## 文字
 
-```
+``` bash
 curl 'https://www.degpt.ai/api/v1/chat/completion/proxy' \
   -H 'accept: */*' \
   -H 'accept-language: en-US,en;q=0.9,zh-CN;q=0.8,zh;q=0.7' \
@@ -2089,7 +2089,7 @@ data: [DONE]
 
 ### 文字+图片
 
-```
+``` bash
 curl 'https://www.degpt.ai/api/v1/chat/completion/proxy' \
   -H 'accept: */*' \
   -H 'accept-language: en-US,en;q=0.9,zh-CN;q=0.8,zh;q=0.7' \

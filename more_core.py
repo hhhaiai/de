@@ -1,10 +1,12 @@
+import base64
 import json
 import multiprocessing
 import os
 import random
+import re
 import string
 import time
-from typing import Dict, Any, List, Union, Optional
+from typing import Dict, Any, List, Union, Optional, Tuple
 
 import tiktoken
 import uvicorn
@@ -38,6 +40,143 @@ class APIServer:
         self.encoding = tiktoken.get_encoding("cl100k_base")
         self._setup_routes()
         self._setup_scheduler()
+    
+    def validate_image_url(self, url: str) -> None:
+        """验证图片URL和格式"""
+        if not url:
+            raise ValueError("图片URL不能为空")
+        
+        # Base64格式验证
+        if url.startswith("data:image/"):
+            try:
+                # 提取MIME类型和数据
+                if ',' not in url:
+                    raise ValueError("Base64图片格式无效")
+                header, data = url.split(',', 1)
+                mime_type = header.split(';')[0].split(':')[1]
+                
+                # 验证支持的图片格式
+                if mime_type not in ["image/jpeg", "image/png", "image/gif", "image/webp"]:
+                    raise ValueError(f"不支持的图片格式: {mime_type}")
+                
+                # 验证文件大小（Base64解码后）
+                try:
+                    decoded_data = base64.b64decode(data)
+                    if len(decoded_data) > 20 * 1024 * 1024:  # 20MB
+                        raise ValueError("图片大小超出限制: 20MB")
+                except Exception as e:
+                    raise ValueError(f"Base64解码失败: {str(e)}")
+            except Exception as e:
+                raise ValueError(f"Base64图片验证失败: {str(e)}")
+        
+        # HTTP/HTTPS URL格式验证
+        elif url.startswith(("http://", "https://")):
+            # URL格式基本验证
+            url_pattern = re.compile(
+                r'^https?://'  # http:// 或 https://
+                r'(?:(?:[A-Z0-9](?:[A-Z0-9-]{0,61}[A-Z0-9])?\.)+'  # 域名
+                r'[A-Z]{2,6}\.?|'  # 顶级域名
+                r'localhost|'  # localhost
+                r'\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3})'  # IP地址
+                r'(?::\d+)?'  # 可选端口
+                r'(?:/?|[/?]\S+)$', re.IGNORECASE)
+            
+            if not url_pattern.match(url):
+                raise ValueError("无效的图片URL格式")
+        else:
+            raise ValueError("不支持的图片URL格式，请使用Base64或HTTP/HTTPS URL")
+    
+    def validate_multimodal_content(self, content: Union[str, List[Dict[str, Any]]]) -> Tuple[bool, str, str]:
+        """验证多模态内容格式
+        
+        返回:
+            (验证通过, 内容类型, 合并的文本内容)
+        """
+        # 支持字符串格式（向后兼容）
+        if isinstance(content, str):
+            return True, "text", content
+        
+        # 支持数组格式（多模态）
+        if isinstance(content, list):
+            has_image = False
+            text_parts = []
+            
+            for item in content:
+                if not isinstance(item, dict) or "type" not in item:
+                    raise ValueError("内容项必须是包含type字段的字典")
+                
+                item_type = item.get("type")
+                if item_type == "text":
+                    if "text" not in item:
+                        raise ValueError("文本内容项必须包含text字段")
+                    text_parts.append(item.get("text", ""))
+                elif item_type == "image_url":
+                    has_image = True
+                    if "image_url" not in item or "url" not in item["image_url"]:
+                        raise ValueError("图片内容项必须包含image_url.url字段")
+                    # 验证图片URL格式和大小
+                    try:
+                        self.validate_image_url(item["image_url"]["url"])
+                    except ValueError as e:
+                        raise ValueError(f"图片验证失败: {str(e)}")
+                else:
+                    raise ValueError(f"不支持的内容类型: {item_type}")
+            
+            content_type = "multimodal" if has_image else "text"
+            combined_text = "\n".join(text_parts)
+            
+            return True, content_type, combined_text
+        
+        raise ValueError("content必须是字符串或内容数组")
+    
+    def select_model_for_content(self, model_name: str, content_type: str) -> str:
+        """基于内容类型智能选择模型"""
+        # 如果是纯文本，使用原有逻辑
+        if content_type == "text":
+            if model_name == "auto":
+                return dg.get_auto_model()
+            return dg.get_model_by_autoupdate(model_name)
+        
+        # 如果包含图片，需要检查模型是否支持图片
+        if content_type == "multimodal":
+            # 获取可用模型列表
+            try:
+                models_str = dg.get_models()
+                models_data = json.loads(models_str)
+                available_models = models_data.get("data", [])
+                
+                # 筛选支持图片的模型
+                image_models = [
+                    model for model in available_models 
+                    if model.get("support") == "image"
+                ]
+                
+                if not image_models:
+                    raise ValueError("当前无可用的图片支持模型，请使用纯文本请求")
+                
+                # 如果指定的模型支持图片，使用指定模型
+                if model_name != "auto":
+                    for model in image_models:
+                        if model.get("name") == model_name or model.get("id") == model_name:
+                            return dg.get_model_by_autoupdate(model_name)
+                
+                # 否则自动选择第一个可用的图片模型
+                best_model = image_models[0]
+                model_id = best_model.get("name") or best_model.get("id")
+                return dg.get_model_by_autoupdate(model_id)
+                
+            except Exception as e:
+                if debug:
+                    print(f"模型选择错误: {e}")
+                # 降级处理：如果无法获取模型列表，使用原有逻辑
+                if model_name == "auto":
+                    return dg.get_auto_model()
+                return dg.get_model_by_autoupdate(model_name)
+        
+        # 默认情况
+        if model_name == "auto":
+            return dg.get_auto_model()
+        return dg.get_model_by_autoupdate(model_name)
 
     def _setup_scheduler(self):
         """ Schedule tasks to check and reload routes and models at regular intervals. """
@@ -491,14 +630,48 @@ class APIServer:
         try:
             # check model
             model_name = data.get("model")
+            
+            # 验证消息格式并检测内容类型
+            msgs = data.get("messages")
+            if not msgs:
+                raise HTTPException(status_code=400, detail="消息不能为空")
+            
+            if not isinstance(msgs, list):
+                raise HTTPException(status_code=400, detail="消息必须是一个列表")
+            
+            # 检测是否包含多模态内容
+            has_multimodal_content = False
+            
+            # 验证每条消息的基本结构和内容格式
+            for i, message in enumerate(msgs):
+                if not isinstance(message, dict):
+                    raise HTTPException(status_code=400, detail=f"消息 {i} 必须是一个字典")
+                if "role" not in message or "content" not in message:
+                    raise HTTPException(status_code=400, detail=f"消息 {i} 必须包含 'role' 和 'content' 字段")
+                if message["role"] not in ["system", "user", "assistant"]:
+                    raise HTTPException(status_code=400, detail=f"消息 {i} 的 'role' 必须是 'system', 'user' 或 'assistant' 之一")
+                
+                # 使用新的多模态验证函数
+                content = message["content"]
+                try:
+                    is_valid, content_type, combined_text = self.validate_multimodal_content(content)
+                    if content_type == "multimodal":
+                        has_multimodal_content = True
+                except ValueError as e:
+                    raise HTTPException(status_code=400, detail=f"消息 {i} 格式错误: {str(e)}")
+            
+            # 基于内容类型选择模型
+            content_type = "multimodal" if has_multimodal_content else "text"
+            
             # 对于所有请求，如果模型不存在则使用auto校准
             if model_name and model_name != "auto" and not dg.is_model_available(model_name):
                 model_name = "auto"
-            # just auto will check
-            if "auto" == model_name:
-                model_name = dg.get_auto_model()
-            else:
-                model_name = dg.get_model_by_autoupdate(model_name)
+            
+            # 使用智能模型选择
+            try:
+                model_name = self.select_model_for_content(model_name or "auto", content_type)
+            except ValueError as e:
+                raise HTTPException(status_code=400, detail=str(e))
 
             model = model_name  # 设置最终的model变量
             # must has token ? token check
@@ -508,13 +681,8 @@ class APIServer:
                 raise HTTPException(status_code=401, detail="无效的Token")
 
             # call ai
-            msgs = data.get("messages")
             if not msgs:
                 raise HTTPException(status_code=400, detail="消息不能为空")
-
-            # 验证消息格式
-            if not isinstance(msgs, list):
-                raise HTTPException(status_code=400, detail="消息必须是一个列表")
 
             # 获取会话ID - 支持session_id和user_id参数
             session_id = data.get("session_id")

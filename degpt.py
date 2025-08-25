@@ -81,6 +81,27 @@ curl 'https://www.degpt.ai/api/v1/chat/completion/proxy' \
   -H 'user-agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/138.0.0.0 Safari/537.36' \
   --data-raw '{"model":"doubao-seed-1-6-250615","messages":[{"role":"user","content":[{"type":"text","text":"数学原理是什么呢?"}]}],"enable_thinking":false,"project":"DecentralGPT","stream":true}'
 
+-------
+
+
+curl 'https://www.degpt.ai/api/v1/chat/completion/proxy' \
+  -H 'accept: */*' \
+  -H 'accept-language: en-US,en;q=0.9,zh-CN;q=0.8,zh;q=0.7' \
+  -H 'authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6IjB4M2UxZTFlN0I2ODgzZkZGZDE0YzMwOTcwZjhFMGI0OUQ3RmZEODYyRCIsImV4cCI6MTc1NjQ1OTQyNn0.xi85JC8euev_tL0ETdkL617ZBj9RPmmODcZ-f--lmuQ' \
+  -H 'content-type: application/json' \
+  -b '_ga=GA1.1.761121180.1732095521; _ga_ELT9ER83T2=GS2.1.s1756131635$o118$g0$t1756131635$j60$l0$h0' \
+  -H 'dnt: 1' \
+  -H 'origin: https://www.degpt.ai' \
+  -H 'priority: u=1, i' \
+  -H 'referer: https://www.degpt.ai/' \
+  -H 'sec-ch-ua: "Not;A=Brand";v="99", "Google Chrome";v="139", "Chromium";v="139"' \
+  -H 'sec-ch-ua-mobile: ?0' \
+  -H 'sec-ch-ua-platform: "macOS"' \
+  -H 'sec-fetch-dest: empty' \
+  -H 'sec-fetch-mode: cors' \
+  -H 'sec-fetch-site: same-origin' \
+  -H 'user-agent: Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/139.0.0.0 Safari/537.36' \
+  --data-raw '{"model":"doubao-seed-1-6-250615","messages":[{"role":"user","content":[{"type":"text","text":"这张图是什么意思？"},{"type":"image_url","image_url":{"url":"data:image/png;base64,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"}}]}],"enable_thinking":false,"project":"DecentralGPT","stream":true}'
 
 
 """
@@ -88,8 +109,10 @@ import json
 import os
 import re
 import time
+import base64
+import mimetypes
 from datetime import datetime, timedelta
-from typing import Set, Optional, List, Dict
+from typing import Set, Optional, List, Dict, Union
 from urllib.parse import urljoin, urlparse
 from bs4 import BeautifulSoup
 import aiohttp
@@ -97,6 +120,12 @@ import requests
 # 禁用 SSL 警告
 import urllib3
 from urllib3.exceptions import InsecureRequestWarning
+try:
+    from PIL import Image
+    import io
+except ImportError:
+    Image = None
+    io = None
 
 
 urllib3.disable_warnings(InsecureRequestWarning)
@@ -217,6 +246,248 @@ def clear_session(session_id: str) -> None:
             del SESSION_STORAGE[session_id]
             if debug:
                 print(f"清除会话: {session_id}")
+
+
+def validate_image_content(image_data: str) -> Dict[str, any]:
+    """
+    验证图片内容格式和大小
+    
+    Args:
+        image_data: Base64编码的图片数据或URL
+        
+    Returns:
+        Dict: {
+            "valid": bool,
+            "error": str,
+            "format": str,
+            "size": int
+        }
+    """
+    try:
+        # 检查是否为Base64编码的图片
+        if image_data.startswith('data:image/'):
+            # 解析data URL
+            header, base64_data = image_data.split(',', 1)
+            mime_type = header.split(';')[0].split(':')[1]
+            
+            # 检查支持的图片格式
+            supported_formats = ['image/jpeg', 'image/png', 'image/gif', 'image/webp']
+            if mime_type not in supported_formats:
+                return {
+                    "valid": False,
+                    "error": f"不支持的图片格式: {mime_type}",
+                    "format": mime_type,
+                    "size": 0
+                }
+            
+            try:
+                # 解码Base64数据
+                image_bytes = base64.b64decode(base64_data)
+                image_size = len(image_bytes)
+                
+                # 检查文件大小限制 (20MB)
+                max_size = 20 * 1024 * 1024
+                if image_size > max_size:
+                    return {
+                        "valid": False,
+                        "error": f"图片大小超出限制: {image_size / (1024*1024):.2f}MB > 20MB",
+                        "format": mime_type,
+                        "size": image_size
+                    }
+                
+                # 如果有PIL，验证图片内容
+                if Image and io:
+                    try:
+                        img = Image.open(io.BytesIO(image_bytes))
+                        width, height = img.size
+                        
+                        # 检查分辨率限制
+                        max_resolution = 4096
+                        if width > max_resolution or height > max_resolution:
+                            return {
+                                "valid": False,
+                                "error": f"图片分辨率过高: {width}x{height} > {max_resolution}x{max_resolution}",
+                                "format": mime_type,
+                                "size": image_size
+                            }
+                    except Exception as e:
+                        return {
+                            "valid": False,
+                            "error": f"图片格式错误: {str(e)}",
+                            "format": mime_type,
+                            "size": image_size
+                        }
+                
+                return {
+                    "valid": True,
+                    "error": "",
+                    "format": mime_type,
+                    "size": image_size
+                }
+                
+            except Exception as e:
+                return {
+                    "valid": False,
+                    "error": f"Base64解码失败: {str(e)}",
+                    "format": mime_type,
+                    "size": 0
+                }
+        
+        elif image_data.startswith(('http://', 'https://')):
+            # URL图片支持（简单验证）
+            return {
+                "valid": True,
+                "error": "",
+                "format": "image/url",
+                "size": 0
+            }
+        else:
+            return {
+                "valid": False,
+                "error": "不支持的图片格式，仅支持Base64编码或HTTP/HTTPS URL",
+                "format": "unknown",
+                "size": 0
+            }
+            
+    except Exception as e:
+        return {
+            "valid": False,
+            "error": f"图片验证失败: {str(e)}",
+            "format": "unknown",
+            "size": 0
+        }
+
+
+def parse_multimodal_content(messages: List[Dict]) -> Dict[str, any]:
+    """
+    解析多模态消息内容
+    
+    Args:
+        messages: 消息列表，支持字符串和content数组格式
+        
+    Returns:
+        Dict: {
+            "has_images": bool,
+            "text_content": str,
+            "image_data": List[Dict],
+            "processed_messages": List[Dict],
+            "errors": List[str]
+        }
+    """
+    result = {
+        "has_images": False,
+        "text_content": "",
+        "image_data": [],
+        "processed_messages": [],
+        "errors": []
+    }
+    
+    try:
+        for message in messages:
+            if not isinstance(message, dict):
+                result["errors"].append("消息必须是字典类型")
+                continue
+                
+            role = message.get("role")
+            content = message.get("content")
+            
+            if not role or not content:
+                result["errors"].append("消息必须包含role和content字段")
+                continue
+            
+            # 处理不同的content格式
+            if isinstance(content, str):
+                # 纯文本格式
+                result["text_content"] += content + "\n"
+                result["processed_messages"].append({
+                    "role": role,
+                    "content": content
+                })
+            
+            elif isinstance(content, list):
+                # 多模态内容数组
+                text_parts = []
+                message_content = ""
+                
+                for content_item in content:
+                    if not isinstance(content_item, dict):
+                        result["errors"].append("内容项必须是字典类型")
+                        continue
+                    
+                    content_type = content_item.get("type")
+                    
+                    if content_type == "text":
+                        text = content_item.get("text", "")
+                        text_parts.append(text)
+                        message_content += text
+                        
+                    elif content_type == "image_url":
+                        image_url_data = content_item.get("image_url", {})
+                        image_url = image_url_data.get("url", "")
+                        
+                        if image_url:
+                            # 验证图片
+                            validation_result = validate_image_content(image_url)
+                            if validation_result["valid"]:
+                                result["has_images"] = True
+                                result["image_data"].append({
+                                    "url": image_url,
+                                    "detail": image_url_data.get("detail", "auto"),
+                                    "format": validation_result["format"],
+                                    "size": validation_result["size"]
+                                })
+                            else:
+                                result["errors"].append(f"图片验证失败: {validation_result['error']}")
+                    else:
+                        result["errors"].append(f"不支持的内容类型: {content_type}")
+                
+                # 将多模态内容转换为文本格式传给后端
+                combined_text = " ".join(text_parts)
+                result["text_content"] += combined_text + "\n"
+                result["processed_messages"].append({
+                    "role": role,
+                    "content": combined_text if combined_text.strip() else "查看图片内容"
+                })
+            
+            else:
+                result["errors"].append(f"不支持的content类型: {type(content)}")
+        
+        return result
+        
+    except Exception as e:
+        result["errors"].append(f"解析多模态内容失败: {str(e)}")
+        return result
+
+
+def filter_image_supported_models(models_data: Dict) -> List[Dict]:
+    """
+    筛选支持图片的模型
+    
+    Args:
+        models_data: 模型数据，包含'data'字段
+        
+    Returns:
+        List[Dict]: 支持图片的模型列表
+    """
+    try:
+        if not isinstance(models_data, dict) or "data" not in models_data:
+            return []
+            
+        all_models = models_data.get("data", [])
+        image_models = []
+        
+        for model in all_models:
+            if isinstance(model, dict):
+                support = model.get("support", "text")
+                if support == "image" or "image" in str(support).lower():
+                    image_models.append(model)
+                    
+        return image_models
+        
+    except Exception as e:
+        if debug:
+            print(f"筛选图片模型失败: {e}")
+        return []
 
 
 def get_auto_model(cooldown_seconds: int = 300) -> str:
@@ -785,16 +1056,51 @@ def chat_completion_messages(
     if not messages or not isinstance(messages, list):
         raise ValueError("messages 参数必须是一个非空列表")
 
-    # 验证每条消息的格式
-    for i, message in enumerate(messages):
-        if not isinstance(message, dict):
-            raise ValueError(f"消息 {i} 必须是一个字典")
-        if "role" not in message or "content" not in message:
-            raise ValueError(f"消息 {i} 必须包含 'role' 和 'content' 字段")
-        if message["role"] not in ["system", "user", "assistant"]:
-            raise ValueError(f"消息 {i} 的 'role' 必须是 'system', 'user' 或 'assistant' 之一")
-        if not isinstance(message["content"], str):
-            raise ValueError(f"消息 {i} 的 'content' 必须是字符串")
+    # 解析多模态内容
+    multimodal_result = parse_multimodal_content(messages)
+    
+    # 检查错误
+    if multimodal_result["errors"]:
+        error_msg = "; ".join(multimodal_result["errors"])
+        raise ValueError(f"消息格式错误: {error_msg}")
+    
+    # 检查是否包含图片
+    has_images = multimodal_result["has_images"]
+    processed_messages = multimodal_result["processed_messages"]
+    
+    if debug:
+        print(f"多模态解析结果: has_images={has_images}, 图片数量={len(multimodal_result['image_data'])}")
+        if has_images:
+            for img in multimodal_result["image_data"]:
+                print(f"图片信息: 格式={img['format']}, 大小={img['size']} bytes")
+
+    # 针对图片请求，筛选支持图片的模型
+    if has_images:
+        # 获取当前模型列表
+        try:
+            models_json = json.loads(get_models())
+            image_models = filter_image_supported_models(models_json)
+            
+            if not image_models:
+                raise ValueError("当前无可用的图片支持模型，请使用纯文本请求")
+            
+            # 如果指定了model且该模型不支持图片，则选择支持图片的模型
+            if model and model != "auto":
+                model_supports_image = any(m.get("id") == model and 
+                                         (m.get("support") == "image" or "image" in str(m.get("support", "")).lower())
+                                         for m in image_models)
+                if not model_supports_image:
+                    # 选择第一个可用的图片模型
+                    selected_model = image_models[0].get("id")
+                    if debug:
+                        print(f"原模型 {model} 不支持图片，切换为 {selected_model}")
+                    model = selected_model
+            
+        except Exception as e:
+            if debug:
+                print(f"获取图片模型列表失败: {e}")
+            # 降级处理：如果无法获取图片模型，但有图片内容，则报错
+            raise ValueError(f"无法获取图片支持模型列表: {e}")
 
     # 确保model有效
     if not model or model == "auto":
@@ -807,13 +1113,13 @@ def chat_completion_messages(
     # 处理会话上下文
     if session_id:
         session_messages = get_session(session_id)
-        # 合并历史消息和当前消息
-        combined_messages = session_messages + messages
+        # 合并历史消息和当前消息（使用处理后的消息）
+        combined_messages = session_messages + processed_messages
         if debug:
             print(f"会话 {session_id} 的历史消息: {len(session_messages)} 条")
             print(f"合并后的消息: {len(combined_messages)} 条")
     else:
-        combined_messages = messages
+        combined_messages = processed_messages
 
     # 获取token
     url = f'{base_url}/v1/auths/printSignIn'
@@ -854,10 +1160,24 @@ def chat_completion_messages(
         "Accept-Language": os.getenv("DEGPT_PROXY_ACCEPT_LANGUAGE", "zh-CN,zh;q=0.9"),
         "Cookie": auth_cookie
     }
+    
+    # 构建请求数据：如果有图片，使用原始消息格式；否则使用处理后的消息
+    if has_images:
+        # 使用原始消息格式保持多模态内容
+        if session_id:
+            session_messages = get_session(session_id)
+            # 对于图片请求，也需要合并历史消息，但保持原格式
+            api_messages = session_messages + messages
+        else:
+            api_messages = messages
+    else:
+        # 纯文本请求使用处理后的消息
+        api_messages = combined_messages
+    
     # 后端服务只支持流式调用
     data_proxy = {
         "model": model,
-        "messages": combined_messages,
+        "messages": api_messages,
         "stream": True,  # 始终使用流式调用后端
         "project": project,
         "enable_thinking": True
