@@ -164,6 +164,7 @@ curl -X POST http://localhost:7860/api/v1/chat/completions \
 
 
 ``` bash
+
 curl http://localhost:7860/api/v1/messages \
   -H "Content-Type: application/json" \
   -H "x-api-key: ANTHROPIC_API_KEY" \
