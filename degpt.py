@@ -155,12 +155,12 @@ if SESSION_STORAGE_TYPE == "memory":
 cached_models = {
     "object": "list",
     "data": [],
-    "version": "1.2.4",
+    "version": "1.2.5",
     "provider": "DeGPT",
     "name": "DeGPT",
     "default_locale": "en-US",
     "status": True,
-    "time": 20250822
+    "time": 20250826
 }
 
 
