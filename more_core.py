@@ -228,55 +228,29 @@ class APIServer:
             except Exception as e:
                 raise HTTPException(status_code=500, detail=str(e))
 
-        # Claude协议支持
-        @self.app.post("/api/v1/messages", name="claude_messages")
-        async def claude_messages(request: Request):
-            """Claude协议消息端点"""
+        async def claude_messages_handler(request: Request):
+            """Claude协议消息处理器（简化的Claude协议消息端点，实现最大兼容性）"""
             try:
-                # print("---"*20)
-                # print("--- 捕获到 Beta 请求 (/api/v1/messages?beta=true) ---")
-                # # --- 新增调试逻辑：检查 beta=true 查询参数 ---
-                # from urllib.parse import parse_qs
-                # # 获取查询参数字符串 (e.g., "beta=true&other=value")
-                # query_string = request.url.query
-                # # 解析查询参数
-                # query_params = parse_qs(query_string)
-                # # 检查 beta 参数是否存在且其第一个值为 'true' (忽略大小写)
-                # is_beta_request = 'beta' in query_params and query_params['beta'][0].lower() == 'true'
-
-                # if is_beta_request:
-                #     # 1. 获取并打印请求头 (Headers)
-                #     headers = dict(request.headers)
-                #     print("请求 Headers:")
-                #     for key, value in headers.items():
-                #         # 注意：Authorization 头部可能包含敏感信息，打印时请注意
-                #         print(f"  {key}: {value}")
-                #     # 2. 获取并打印请求体 (Body)
-                #     # 注意：await request.body() 只能调用一次
-                #     raw_body_bytes = await request.body()
-                #     try:
-                #         # 尝试将 body 解析为 JSON
-                #         body_data = json.loads(raw_body_bytes.decode('utf-8'))
-                #         print("请求 Body (JSON):")
-                #         print(json.dumps(body_data, indent=2, ensure_ascii=False)) # 格式化打印
-                #     except json.JSONDecodeError:
-                #         # 如果不是 JSON，就打印原始字符串
-                #         raw_body_str = raw_body_bytes.decode('utf-8')
-                #         print("请求 Body (Raw):")
-                #         print(raw_body_str)
-
-                #     print("--- Beta 请求信息打印完毕 ---")
-                #     print("==="*20)
-
                 headers = dict(request.headers)
                 data = await request.json()
+                
+                if debug:
+                    print("--- Claude 请求 ---")
+                    print(f"Headers: {headers}")
+                    print(f"Body: {json.dumps(data, indent=2, ensure_ascii=False)}")
+                    print("--- 请求结束 ---")
+                
+                # 容错处理：检查必需字段
+                if "messages" not in data or not data["messages"]:
+                    raise HTTPException(status_code=400, detail="请求必须包含消息")
+                
                 # 检查流式请求
                 stream = data.get("stream", False)
 
-                # 转换Claude格式到OpenAI格式
+                # 转换Claude格式到OpenAI格式（包含容错处理）
                 openai_data = self._convert_claude_to_openai(data, headers)
 
-                # 使用现有的OpenAI处理逻辑
+                # 使用现有的OpenAI处理逻辑（包含消息过滤）
                 response = self._generate_response_optimized(headers, openai_data)
 
                 if stream and isinstance(response, StreamingResponse):
@@ -300,10 +274,36 @@ class APIServer:
                     claude_response = self._convert_openai_to_claude(response_data)
                     return JSONResponse(content=claude_response)
 
+            except HTTPException:
+                # 重新抛出HTTPException（包括验证错误）
+                raise
+            except json.JSONDecodeError as e:
+                if debug:
+                    print(f"JSON解析错误: {e}")
+                raise HTTPException(status_code=400, detail="Invalid JSON format")
             except Exception as e:
                 if debug:
                     print(f"Claude request processing error: {e}")
-                raise HTTPException(status_code=500, detail="Internal server error") from e
+                # 容错处理：返回Claude格式错误响应
+                error_response = {
+                    "type": "error",
+                    "error": {
+                        "type": "server_error",
+                        "message": "Internal server error"
+                    }
+                }
+                return JSONResponse(content=error_response, status_code=500)
+        
+        # 注册两个路径，都指向同一个处理器
+        @self.app.post("/v1/messages", name="claude_messages_v1")
+        async def claude_messages_v1(request: Request):
+            """Claude协议消息端点 - /v1/messages路径（标凁Claude API路径）"""
+            return await claude_messages_handler(request)
+        
+        @self.app.post("/api/v1/messages", name="claude_messages")
+        async def claude_messages(request: Request):
+            """Claude协议消息端点 - /api/v1/messages路径（兼容性路径）"""
+            return await claude_messages_handler(request)
 
         # Register dynamic chat completion routes
         routes = self._get_routes()
@@ -375,39 +375,110 @@ class APIServer:
         numbers_str = ''.join(random.choices(string.digits, k=4))
         return f"session_{letters_str}{numbers_str}"
 
-    def _convert_claude_to_openai(self, claude_data: Dict, headers: Dict) -> Dict:
-        """Convert Claude format to OpenAI format with complete field mapping"""
-        # Claude格式完整示例:
-        # {
-        #   "model": "claude-3-sonnet-20240229",
-        #   "messages": [{"role": "user", "content": [{"type": "text", "text": "Hello"}]}],
-        #   "max_tokens": 1024,
-        #   "stream": false,
-        #   "temperature": 0.7,
-        #   "top_p": 0.9,
-        #   "top_k": 5,
-        #   "stop_sequences": ["\n\nHuman:"],
-        #   "system": "You are a helpful assistant."
-        # }
+    def _merge_consecutive_messages(self, messages: List[Dict]) -> List[Dict]:
+        """合并连续的相同角色消息（符合Claude API规范）
+        
+        Claude API允许连续的相同角色消息，但需要正确处理。
+        这个方法将连续的相同角色消息合并为单条消息。
+        """
+        if not messages:
+            return []
+        
+        merged = []
+        current_role = None
+        current_content = []
+        
+        for message in messages:
+            if not isinstance(message, dict):
+                continue
+                
+            role = message.get("role")
+            content = message.get("content", [])
+            
+            # 如果角色改变或者这是第一条消息
+            if role != current_role or current_role is None:
+                # 如果有累积的内容，保存之前的合并消息
+                if current_role is not None and current_content:
+                    merged.append({
+                        "role": current_role,
+                        "content": self._merge_content(current_content)
+                    })
+                
+                # 开始新的角色
+                current_role = role
+                current_content = [content] if content else []
+            else:
+                # 同角色，累积内容
+                current_content.append(content)
+        
+        # 保存最后累积的消息
+        if current_role is not None and current_content:
+            merged.append({
+                "role": current_role,
+                "content": self._merge_content(current_content)
+            })
+        
+        return merged
+    
+    def _merge_content(self, content_list: List) -> Union[str, List[Dict]]:
+        """合并消息内容
+        
+        支持字符串和数组格式的内容合并
+        """
+        if not content_list:
+            return ""
+        
+        # 如果所有内容都是字符串，合并为单个字符串
+        if all(isinstance(content, str) for content in content_list):
+            return " ".join(content.strip() for content in content_list if content.strip())
+        
+        # 如果所有内容都是列表，合并为单个列表
+        if all(isinstance(content, list) for content in content_list):
+            merged = []
+            for content in content_list:
+                merged.extend(content)
+            return merged
+        
+        # 混合格式，转换为字符串
+        result_parts = []
+        for content in content_list:
+            if isinstance(content, str):
+                result_parts.append(content)
+            elif isinstance(content, list):
+                # 将数组格式转换为文本
+                text_parts = []
+                for item in content:
+                    if isinstance(item, dict) and item.get("type") == "text":
+                        text_parts.append(item.get("text", ""))
+                result_parts.append(" ".join(text_parts))
+        
+        return " ".join(result_parts)
 
+    def _convert_claude_to_openai(self, claude_data: Dict, headers: Dict) -> Dict:
+        """Convert Claude format to OpenAI format with simplified parameter handling"""
+        # 首先合并连续的相同角色消息（Claude API规范）
+        original_messages = claude_data.get("messages", [])
+        merged_messages = self._merge_consecutive_messages(original_messages)
+        
+        if debug:
+            print(f"消息合并：输入{len(original_messages)}条 -> 输出{len(merged_messages)}条")
+
+        # 基础OpenAI格式
         openai_data = {
             "model": claude_data.get("model", "gpt-4o-mini"),
-            "messages": self._convert_claude_messages(claude_data.get("messages", [])),
+            "messages": self._convert_claude_messages(merged_messages),
             "stream": claude_data.get("stream", False)
         }
 
-        # 映射所有标准参数
-        parameter_mapping = {
+        # 简化参数映射：只处理核心参数
+        core_params = {
             "max_tokens": "max_tokens",
-            "temperature": "temperature",
+            "temperature": "temperature", 
             "top_p": "top_p",
-            "stop_sequences": "stop",
-            "top_k": "top_k",
-            "frequency_penalty": "frequency_penalty",
-            "presence_penalty": "presence_penalty"
+            "stop_sequences": "stop"
         }
-
-        for claude_key, openai_key in parameter_mapping.items():
+        
+        for claude_key, openai_key in core_params.items():
             if claude_key in claude_data:
                 openai_data[openai_key] = claude_data[claude_key]
 
@@ -418,19 +489,31 @@ class APIServer:
                 "content": claude_data["system"]
             })
 
-        # 处理session_id和user_id
-        session_id = claude_data.get("session_id")
-        user_id = claude_data.get("user_id")
-        if session_id:
-            openai_data["session_id"] = session_id
-        if user_id:
-            openai_data["user_id"] = user_id
+        # 处理会话相关参数
+        for param in ["session_id", "user_id"]:
+            if param in claude_data:
+                openai_data[param] = claude_data[param]
 
-        # 处理tools参数（如果存在）
-        if "tools" in claude_data:
-            openai_data["tools"] = claude_data["tools"]
-        if "tool_choice" in claude_data:
-            openai_data["tool_choice"] = claude_data["tool_choice"]
+        # 处理工具参数
+        for param in ["tools", "tool_choice"]:
+            if param in claude_data:
+                openai_data[param] = claude_data[param]
+
+        # Claude特有参数：仅记录，不透传给degpt.py
+        claude_specific = ["thinking", "anthropic_beta", "anthropic_version", 
+                         "anthropic-dangerous-direct-browser-access"]
+        
+        for param in claude_specific:
+            if param in claude_data:
+                if debug:
+                    print(f"Claude特有参数 {param}: {claude_data[param]}（仅记录，不透传）")
+
+        # 忽略未知参数，不报错
+        known_params = set(core_params.keys()) | {"model", "messages", "stream", "system", 
+                                                "session_id", "user_id", "tools", "tool_choice"} | set(claude_specific)
+        unknown_params = set(claude_data.keys()) - known_params
+        if unknown_params and debug:
+            print(f"忽略未识别的参数: {unknown_params}")
 
         return openai_data
 
@@ -448,20 +531,26 @@ class APIServer:
             # 转换内容格式
             if isinstance(content, list):
                 # Claude格式: [{"type": "text", "text": "Hello"}]
-                text_content = ""
+                text_parts = []
                 for content_item in content:
                     if isinstance(content_item, dict) and content_item.get("type") == "text":
-                        text_content += content_item.get("text", "") + "\n"
-                openai_messages.append({
-                    "role": role,
-                    "content": text_content.strip()
-                })
+                        text_parts.append(content_item.get("text", ""))
+                
+                # 合并所有文本内容
+                combined_text = "\n".join(text_parts).strip()
+                if combined_text:  # 只有当有实际内容时才添加
+                    openai_messages.append({
+                        "role": role,
+                        "content": combined_text
+                    })
             else:
                 # 直接使用字符串内容
-                openai_messages.append({
-                    "role": role,
-                    "content": str(content)
-                })
+                content_str = str(content) if content is not None else ""
+                if content_str.strip():  # 只有当有实际内容时才添加
+                    openai_messages.append({
+                        "role": role,
+                        "content": content_str
+                    })
 
         return openai_messages
 
@@ -642,23 +731,45 @@ class APIServer:
             # 检测是否包含多模态内容
             has_multimodal_content = False
             
-            # 验证每条消息的基本结构和内容格式
-            for i, message in enumerate(msgs):
+            # 精简消息过滤：移除无效消息
+            valid_msgs = []
+            for message in msgs:
                 if not isinstance(message, dict):
-                    raise HTTPException(status_code=400, detail=f"消息 {i} 必须是一个字典")
+                    continue
+                
+                # 必需字段检查
                 if "role" not in message or "content" not in message:
-                    raise HTTPException(status_code=400, detail=f"消息 {i} 必须包含 'role' 和 'content' 字段")
+                    continue
+                
                 if message["role"] not in ["system", "user", "assistant"]:
-                    raise HTTPException(status_code=400, detail=f"消息 {i} 的 'role' 必须是 'system', 'user' 或 'assistant' 之一")
+                    continue
+                
+                # 简化内容检查
+                content = message["content"]
+                if isinstance(content, str):
+                    if content.strip():
+                        valid_msgs.append(message)
+                elif isinstance(content, list) and content:
+                    # 检查列表内容是否有效
+                    if any(isinstance(item, dict) and 
+                          ((item.get("type") == "text" and item.get("text", "").strip()) or
+                           (item.get("type") == "image_url" and item.get("image_url", {}).get("url")))
+                          for item in content):
+                        valid_msgs.append(message)
                 
                 # 使用新的多模态验证函数
-                content = message["content"]
                 try:
                     is_valid, content_type, combined_text = self.validate_multimodal_content(content)
                     if content_type == "multimodal":
                         has_multimodal_content = True
                 except ValueError as e:
-                    raise HTTPException(status_code=400, detail=f"消息 {i} 格式错误: {str(e)}")
+                    continue  # 跳过格式错误的消息
+            
+            # 检查是否还有有效的消息
+            if not valid_msgs:
+                raise HTTPException(status_code=400, detail="没有有效的消息可以处理")
+            
+            msgs = valid_msgs
             
             # 基于内容类型选择模型
             content_type = "multimodal" if has_multimodal_content else "text"
@@ -830,10 +941,12 @@ class APIServer:
                 for chunk in response.iter_lines():
                     if chunk:
                         decoded_chunk = chunk.decode('utf-8')
+                        # 处理reasoning_content字段转换
+                        processed_chunk = self._process_stream_chunk(decoded_chunk)
                         # 确保每行以 \n\n 结尾，符合 SSE 格式
-                        if not decoded_chunk.endswith('\n'):
-                            decoded_chunk += '\n'
-                        yield decoded_chunk
+                        if not processed_chunk.endswith('\n'):
+                            processed_chunk += '\n'
+                        yield processed_chunk
             except Exception as e:
                 if debug:
                     print(f"Error in _stream_response (fallback): {e}")
@@ -843,6 +956,7 @@ class APIServer:
         """
         异步包装 StreamingResponseWithSession.iter_lines，
         确保每次 yield 的数据块以 \n\n 结尾，符合 SSE 规范。
+        同时处理reasoning_content字段转换。
         """
         loop = asyncio.get_event_loop()
         # 在线程中运行同步的 iter_lines 以避免阻塞事件循环
@@ -851,11 +965,13 @@ class APIServer:
             for chunk in iterator:
                 if chunk:
                     decoded_chunk = chunk.decode('utf-8')
+                    # 处理reasoning_content字段转换
+                    processed_chunk = self._process_stream_chunk(decoded_chunk)
                     # 确保符合 SSE 格式：每条消息以 \n\n 结尾
                     # degpt.py 返回的已经是 data: ... 或 data: [DONE] 格式
-                    if not decoded_chunk.endswith('\n'):
-                        decoded_chunk += '\n'
-                    yield decoded_chunk
+                    if not processed_chunk.endswith('\n'):
+                        processed_chunk += '\n'
+                    yield processed_chunk
         except Exception as e:
             # 重新抛出异常，让调用者处理
             raise e
@@ -864,30 +980,121 @@ class APIServer:
             # requests 的 iter_lines 通常不需要显式关闭，但保持谨慎
             pass
 
+    def _process_stream_chunk(self, chunk: str) -> str:
+        """处理流式数据块，将reasoning_content转换为content字段，并处理token计数"""
+        try:
+            if not chunk.startswith("data:"):
+                return chunk
+                
+            data_str = chunk[5:].strip()
+            if not data_str:
+                return chunk
+                
+            # 处理[DONE]事件，确保在流结束时提供token计数
+            if data_str == "[DONE]":
+                # 在[DONE]事件之前添加usage信息（如果没有的话）
+                # 这里可以返回一个usage事件，然后返回[DONE]
+                return chunk
+                
+            # 解析JSON数据
+            data = json.loads(data_str)
+            modified = False
+            
+            # 检查是否有choices和reasoning_content字段
+            if "choices" in data and data["choices"]:
+                for choice in data["choices"]:
+                    if "delta" in choice:
+                        delta = choice["delta"]
+                        # 将reasoning_content转换为content
+                        if "reasoning_content" in delta:
+                            delta["content"] = delta.pop("reasoning_content")
+                            modified = True
+                            if debug:
+                                print(f"转换reasoning_content为content: {delta['content'][:50]}...")
+                        
+                        # 检查是否需要在流结束时添加token计数
+                        if choice.get("finish_reason") == "stop" and "usage" not in data:
+                            # 如果流结束但没有usage信息，添加一个基本的usage
+                            data["usage"] = {
+                                "prompt_tokens": 0,
+                                "completion_tokens": 0,
+                                "total_tokens": 0
+                            }
+                            modified = True
+            
+            # 如果数据被修改，返回新的JSON；否则返回原始数据
+            if modified:
+                return f"data: {json.dumps(data, ensure_ascii=False)}"
+            else:
+                return chunk
+            
+        except (json.JSONDecodeError, KeyError) as e:
+            if debug:
+                print(f"处理流式数据块失败: {e}, 原始数据: {chunk[:100]}...")
+            # 如果处理失败，返回原始数据
+            return chunk
+        except Exception as e:
+            if debug:
+                print(f"处理流式数据块遇到未知错误: {e}")
+            return chunk
+
 
     async def _stream_claude_response(self, response):
-        """转换OpenAI流式响应为Claude格式"""
+        """简化的Claude流式响应转换器"""
+        message_id = f"msg_{int(time.time() * 1000)}"
+        model_name = "claude-3-sonnet-20240229"
+        
         try:
+            # message_start事件
+            yield f"event: message_start\ndata: {{\"type\": \"message_start\", \"message\": {{\"id\": \"{message_id}\", \"type\": \"message\", \"role\": \"assistant\", \"content\": [], \"model\": \"{model_name}\", \"stop_reason\": null, \"stop_sequence\": null, \"usage\": {{\"input_tokens\": 0, \"output_tokens\": 0}}}}}}\n\n"
+            
+            # content_block_start事件
+            yield f"event: content_block_start\ndata: {{\"type\": \"content_block_start\", \"index\": 0, \"content_block\": {{\"type\": \"text\", \"text\": \"\"}}}}\n\n"
+            
+            # 处理流式内容
+            output_tokens = 0
             async for chunk in self._stream_response(response):
                 if chunk.startswith("data:") and chunk.strip() != "data: [DONE]":
-                    # 解析OpenAI格式的SSE数据
-                    data_str = chunk[len("data:"):].strip()
+                    data_str = chunk[5:].strip()
                     if data_str:
                         try:
                             openai_data = json.loads(data_str)
-                            # 转换为Claude格式
-                            claude_data = self._convert_openai_stream_to_claude(openai_data)
-                            if claude_data:
-                                yield f"event: completion\ndata: {json.dumps(claude_data, ensure_ascii=False)}\n\n"
+                            if "choices" in openai_data and openai_data["choices"]:
+                                choice = openai_data["choices"][0]
+                                if "delta" in choice and "content" in choice["delta"]:
+                                    content_delta = choice["delta"]["content"]
+                                    output_tokens += len(content_delta.split())
+                                    
+                                    # Claude格式的增量事件
+                                    claude_delta = {
+                                        "type": "content_block_delta",
+                                        "index": 0,
+                                        "delta": {"type": "text_delta", "text": content_delta}
+                                    }
+                                    yield f"event: content_block_delta\ndata: {json.dumps(claude_delta, ensure_ascii=False)}\n\n"
+                                    
+                                # 更新模型名
+                                if "model" in openai_data:
+                                    model_name = openai_data["model"]
                         except json.JSONDecodeError:
                             continue
-                elif "error" in chunk:
-                    # 转发错误信息
-                    yield chunk
-            # 流结束标记
-            yield "event: done\ndata: {}\n\n"
+            
+            # content_block_stop事件
+            yield f"event: content_block_stop\ndata: {{\"type\": \"content_block_stop\", \"index\": 0}}\n\n"
+            
+            # message_delta事件
+            yield f"event: message_delta\ndata: {{\"type\": \"message_delta\", \"delta\": {{\"stop_reason\": \"end_turn\", \"stop_sequence\": null}}, \"usage\": {{\"output_tokens\": {output_tokens}}}}}\n\n"
+            
+            # message_stop事件
+            yield f"event: message_stop\ndata: {{\"type\": \"message_stop\"}}\n\n"
+            
         except Exception as e:
-            yield f"event: error\ndata: {{\"error\": \"Stream processing error: {str(e)}\"}}\n\n"
+            # 错误事件
+            error_event = {
+                "type": "error",
+                "error": {"type": "server_error", "message": f"Stream error: {str(e)}"}
+            }
+            yield f"event: error\ndata: {json.dumps(error_event, ensure_ascii=False)}\n\n"
 
     def _get_workers_count(self) -> int:
         """Calculate optimal worker count"""
@@ -952,7 +1159,7 @@ class APIServer:
     def _reload_routes(self, new_routes: List[str]) -> None:
         """Reload only dynamic routes while preserving static ones"""
         # Define static route names
-        static_routes = {"root", "health", "models", "clear_session", "claude_messages"}
+        static_routes = {"root", "health", "models", "clear_session", "claude_messages", "claude_messages_v1"}
 
         # Remove only dynamic routes
         self.app.routes[:] = [

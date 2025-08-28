@@ -142,8 +142,6 @@ SESSION_TIMEOUT = int(os.getenv("SESSION_TIMEOUT", "1800"))  # 会话超时时�
 SESSION_STORAGE_TYPE = os.getenv("SESSION_STORAGE_TYPE", "memory")  # 存储类型: memory 或 redis
 
 
-# 初始化会话存储
-SESSION_STORAGE_TYPE = "memory"
 SESSION_STORAGE = {}
 
 if SESSION_STORAGE_TYPE == "memory":
@@ -1059,10 +1057,10 @@ def chat_completion_messages(
     # 解析多模态内容
     multimodal_result = parse_multimodal_content(messages)
     
-    # 检查错误
-    if multimodal_result["errors"]:
-        error_msg = "; ".join(multimodal_result["errors"])
-        raise ValueError(f"消息格式错误: {error_msg}")
+    # # 检查错误
+    # if multimodal_result["errors"]:
+    #     error_msg = "; ".join(multimodal_result["errors"])
+    #     raise ValueError(f"消息格式错误: {error_msg}")
     
     # 检查是否包含图片
     has_images = multimodal_result["has_images"]
@@ -1178,7 +1176,7 @@ def chat_completion_messages(
     data_proxy = {
         "model": model,
         "messages": api_messages,
-        "stream": True,  # 始终使用流式调用后端
+        "stream": True,
         "project": project,
         "enable_thinking": True
     }
@@ -1396,26 +1394,54 @@ class StreamingResponseWithSession:
 
 
 if __name__ == '__main__':
-    # get_from_js_v3()
-    # print("get_models: ", get_models())
-    # print("cached_models:", cached_models)
-    # print("base_url: ", base_url)
-    # print("MODEL_STATS:", MODEL_STATS)
-    # print("base_model:",base_model)
-    # base_model = "QwQ-32B"
 
-    models = [
-        base_model,
-        "deepseek-chat",
-        "doubao-seed-1-6-250615",
-        "qwen3-235b-a22b",
-        "gpt-4o",
-        "deepseek-reasoner",
-        "gemini-2.5-flash-preview-05-20",
-        "grok-3"
+
+    # models = [
+    #     base_model,
+    #     "deepseek-chat",
+    #     "doubao-seed-1-6-250615",
+    #     "qwen3-235b-a22b",
+    #     "gpt-4o",
+    #     "deepseek-reasoner",
+    #     "gemini-2.5-flash-preview-05-20",
+    #     "grok-3"
+    # ]
+    # 
+    # for model in models:
+    #     result = chat_completion_message(user_prompt="你是什么模型？", model=model, stream=True)
+    #     print("="*60)
+    #     print(f"模型 {model} 的响应：{result.text}")
+
+    # xx
+    debug=True
+    messages = [
+         {"role": "system", "content": "你是一个最棒的SimiTalk机器人，请回答我的问题。"},
+         {"role": "user", "content": "你是什么模型?"}
+    ]
+    #  支持异常对话，包含空的
+    messages = [
+         {"role": "system", "content": "你是一个最棒的SimiTalk机器人，请回答我的问题。"},
+         {"role": "user", "content": "hello"},
+         {'role': 'assistant', 'content': ''},
+         {"role": "user", "content": "hello"}
+    ]
+    messages = [
+         {"role": "system", "content": "你是一个最棒的SimiTalk机器人，请回答我的问题。"},
+         {"role": "user", "content": [
+                {"type":"text","text":"你是谁？"}
+             ]
+         }
+    ]
+    messages = [
+         {"role": "system", "content": "你是一个最棒的SimiTalk机器人，请回答我的问题。"},
+         {"role": "user", "content": [
+                {"type":"text","text":"图片是啥?"},
+                {"type":"image_url","image_url":{"url":"https://img0.baidu.com/it/u=337102486,1971914968&fm=253&app=138&f=JPEG?w=800&h=1062"}}
+             ]
+         }
     ]
 
-    for model in models:
-        result = chat_completion_message(user_prompt="你是什么模型？", model=model, stream=True)
-        print("="*60)
-        print(f"模型 {model} 的响应：{result.text}")
+    model="doubao-seed-1-6-250615"
+    result = chat_completion_messages(messages=messages, model=model, stream=True)
+    print(f"result{type(result)}:----->{result}")
+    print(f"result.text:----->{result.text}")
